@@ -1,9 +1,4 @@
-__all__ = ['game', 'agents', 'player', 'ghosts', 'settings','utils','environment']
+__all__ = ["environment", "map", "pacman", "ghost", "level_editor"]
 
-from .game import *
-from .agents import *
-from .player import *
-from .ghosts import *
-from .settings import *
-from .utils import *
-from .environment import *
+from .environment import PacEnv
+from .level_editor import LevelEditor

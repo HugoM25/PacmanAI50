@@ -1,7 +1,4 @@
-from pacman_game.agents import Agent
-
-
-class Pacman(Agent) :
+class Pacman() :
     def __init__(self, position: tuple[int, int]):
         super().__init__()
 
@@ -28,6 +25,7 @@ class Pacman(Agent) :
         self.score = 0
         self.current_animation = self.idle_anim
         self.alive = True
+        self.pacgum_eaten = 0
 
 
 
