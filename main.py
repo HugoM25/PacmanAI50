@@ -10,14 +10,14 @@ import cv2
 import os
 import time
 
-from pacman_game import PacEnv 
+from pacman_game import PacEnv
 
 np.bool = np.bool_  # Fix for deprecated usage of np.bool
 
 GAMMA = 0.99
 BATCH_SIZE = 32
 BUFFER_SIZE = 50000
-EPSILON_START = 1.0
+EPSILON_START = 0.5
 EPSILON_END = 0.02
 EPSILON_DECAY = 10000
 TARGET_UPDATE_FREQ = 1000
@@ -48,7 +48,7 @@ class PolicyNetwork(nn.Module):
         return action
 
 
-env = PacEnv("D:\\Ecole\\AI50\\PacmanAI50\\pacman_game\\res\\level0\\")
+env = PacEnv("/home/hugom/Ecole/AI50_PROJ/PacmanAI50/pacman_game/res/level1/")
 
 info = {}
 
@@ -97,11 +97,10 @@ for step in itertools.count():
     observations = next_observations
     episode_reward += rewards[0]
 
-    # # ONly for debugging
     # time.sleep(0.1)
 
-    #If the reward gets over X, render the environment
-    if np.mean(reward_buffer) > 1100:
+    # If the reward gets over X, render the environment
+    if np.mean(reward_buffer) > -10000:
         img = env.render(mode="rgb_array")
         cv2.imshow("Pacman", img)
         cv2.waitKey(1)

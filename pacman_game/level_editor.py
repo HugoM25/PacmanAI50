@@ -45,7 +45,7 @@ class LevelEditor:
         self.font = pygame.font.Font(None, 24)
 
         # Load the tileset used to draw the grid
-        self.load_tileset_to_paint("tileset_pacman1.png")
+        self.load_tileset_to_paint("tileset.png")
 
         # Create the buttons
         self.save_button = pygame.Rect(10, GRID_HEIGHT + 10, 80, 30)
