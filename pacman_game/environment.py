@@ -10,7 +10,7 @@ from pacman_game.ghosts import *
 MAX_STEPS = 5000
 
 class PacEnv(gym.Env):
-    def __init__(self, level_folder_path:str):
+    def __init__(self, level_folder_path:str, flatten_observation:bool = False):
         super().__init__()
 
         # Load the map
@@ -49,6 +49,8 @@ class PacEnv(gym.Env):
         # Define the observation space
         # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
         self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
+
+        self.flatten_observation = flatten_observation
 
 
     def step(self, actions):
@@ -93,11 +95,11 @@ class PacEnv(gym.Env):
                 if candidate_cell_type == GUM:
                     rewards[agent_index] = 2
                     agent.pacgum_eaten += 1
-                    self.map.type_map[agent.position[0], agent.position[1]] = EMPTY
+                    self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
 
                 elif candidate_cell_type == SUPER_GUM:
                     rewards[agent_index] = 10
-                    self.map.type_map[agent.position[0], agent.position[1]] = EMPTY
+                    self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
 
                 elif candidate_cell_type == EMPTY:
                     rewards[agent_index] = -1
@@ -178,7 +180,10 @@ class PacEnv(gym.Env):
         for ghost in self.ghosts:
             map[ghost.position[0], ghost.position[1]] = ghost.ghost_type
 
-        return map.flatten()
+        if self.flatten_observation:
+            return map.flatten()
+
+        return map
 
     def _get_observations(self):
         # Get observations for all agents

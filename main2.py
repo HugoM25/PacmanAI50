@@ -27,28 +27,50 @@ MIN_REPLAY_SIZE = 1000
 class PolicyNetwork(nn.Module):
     def __init__(self, env):
         super().__init__()
-        in_features = int(np.prod(env.observation_space.shape))
-
-        self.net = nn.Sequential(
-            nn.Linear(in_features, 128),
-            nn.Tanh(),
-            nn.Linear(128, 4)
+        
+        # Get the shape of the input
+        obs_shape = env.observation_space.shape
+        
+        # Convolutional layers
+        self.conv_net = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU()
+        )
+        
+        # Calculate the size of the feature map after conv layers
+        conv_out_size = 64 * obs_shape[0] * obs_shape[1]
+        
+        # Fully connected layers
+        self.fc_net = nn.Sequential(
+            nn.Linear(conv_out_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 4)  # Output layer for Q-values
         )
 
     def forward(self, x):
-        return self.net(x)
-
+        # Add channel dimension for Conv2D input (batch, channels, height, width)
+        x = x.unsqueeze(1)  
+        
+        # Pass through conv layers
+        conv_out = self.conv_net(x)
+        conv_out = conv_out.view(conv_out.size(0), -1)  # Flatten for FC layers
+        
+        # Pass through fully connected layers
+        return self.fc_net(conv_out)
+    
     def act(self, obs):
         obs_t = torch.as_tensor(obs, dtype=torch.float32)
         q_values = self(obs_t.unsqueeze(0))
-
-        max_q = torch.argmax(q_values, dim=1)[0]
-        action = max_q.detach().item()
-
+        
+        action = torch.argmax(q_values, dim=1)[0].item()
         return action
 
 
-env = PacEnv("D:/Ecole/AI50/PacmanAI50/pacman_game/res/level0/", flatten_observation=True)
+env = PacEnv("D:/Ecole/AI50/PacmanAI50/pacman_game/res/level0/")
 
 info = {}
 
@@ -99,7 +121,7 @@ for step in itertools.count():
 
     # time.sleep(0.1)
 
-    # If the reward gets over X, render the environment
+    #If the reward gets over X, render the environment
     if np.mean(reward_buffer) > -10000:
         img = env.render(mode="rgb_array")
         cv2.imshow("Pacman", img)
