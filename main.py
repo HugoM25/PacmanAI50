@@ -48,7 +48,7 @@ class PolicyNetwork(nn.Module):
         return action
 
 
-env = PacEnv("D:/Ecole/AI50/PacmanAI50/pacman_game/res/level0/", flatten_observation=True)
+env = PacEnv("pacman_game/res/level0/", flatten_observation=True)
 
 info = {}
 
