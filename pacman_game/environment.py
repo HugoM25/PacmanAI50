@@ -25,6 +25,8 @@ class PacEnv(gym.Env):
         self.nb_agents = len(self.agents)
         self.alive_agents = self.nb_agents
 
+        self.current_step = 0
+
         # Parse the ghosts initial positions -----------------------------------
         # TODO : Parse the ghosts initial positions
         self.ghosts: Ghost = []
@@ -82,11 +84,20 @@ class PacEnv(gym.Env):
 
             # Ensure the candidate position is valid
             if candidate_position[0] < 0 or candidate_position[0] >= self.map.type_map.shape[0] or candidate_position[1] < 0 or candidate_position[1] >= self.map.type_map.shape[1] :
-                # Candidate position is out of the map, do nothing
-                rewards[agent_index] = -1
-            elif self.map.type_map[candidate_position[0], candidate_position[1]] in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
+                # Check if the position at the opposite side is valid, if yes then move the agent to the opposite side
+                if candidate_position[0] < 0:
+                    candidate_position[0] = self.map.type_map.shape[0] - 1
+                elif candidate_position[0] >= self.map.type_map.shape[0]:
+                    candidate_position[0] = 0
+                elif candidate_position[1] < 0:
+                    candidate_position[1] = self.map.type_map.shape[1] - 1
+                elif candidate_position[1] >= self.map.type_map.shape[1]:
+                    candidate_position[1] = 0
+
+
+            if self.map.type_map[candidate_position[0], candidate_position[1]] in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
                 # Candidate position is a wall or another pacman agent, do nothing
-                rewards[agent_index] = -1
+                rewards[agent_index] = 0
             else :
                 # Candidate position is valid check the cell type
 
@@ -98,16 +109,16 @@ class PacEnv(gym.Env):
                     self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
 
                 elif candidate_cell_type == SUPER_GUM:
-                    rewards[agent_index] = 10
+                    rewards[agent_index] = 0
                     self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
 
                 elif candidate_cell_type == EMPTY:
-                    rewards[agent_index] = -1
+                    rewards[agent_index] = 0
 
                 elif candidate_cell_type in [GHOST_BLINKY, GHOST_PINKY, GHOST_INKY, GHOST_CLYDE]:
                     # The agent is dead
                     agent.is_alive = False
-                    rewards[agent_index] = -10
+                    rewards[agent_index] = 0
                     self.alive_agents -= 1
 
                 # Move the agent
@@ -147,21 +158,30 @@ class PacEnv(gym.Env):
             for agent in self.agents:
                 if np.all(agent.position == candidate_ghost_position):
                     agent.is_alive = False
-                    rewards[agent_index] = -10
+                    rewards[agent_index] = 0
                     self.alive_agents -= 1
 
             ghost.position = candidate_ghost_position
 
 
         self.current_step += 1
-        # Check if the episode is done
-        if self.current_step >= self.max_steps or np.sum(self.map.type_map == GUM) == 0 or self.alive_agents == 0:
+
+        # Check if all the pacgum are eaten
+        if np.sum(self.map.type_map == GUM) == 0:
+            # Give rewards based on steps left
+            rewards = [(self.max_steps/self.current_step) * 100 for agent in self.agents if agent.alive]
             done = True
 
-        observations = self._get_observations()
+        # Check if the max steps are reached
+        if self.current_step >= self.max_steps :
+            done = True
 
-        info["gum_collected"] = self.agents[0].pacgum_eaten
-        info["max_gum"] = np.sum(self.map.type_map == GUM)
+        # Check if all the agents are dead
+        if self.alive_agents == 0:
+            done = True
+
+        # Get the observations
+        observations = self._get_observations()
 
         return observations, rewards, done, truncated, info
 
