@@ -45,9 +45,8 @@ class PacEnv(gym.Env):
         self.current_step = 0
 
         # Parse the ghosts initial positions -----------------------------------
-        # TODO : Parse the ghosts initial positions
         self.ghosts: Ghost = []
-        blinky_spawn, pinky_spawn, inky_spawn, clyde_spawn = self.map.ghosts_spawns
+        inky_spawn, blinky_spawn, pinky_spawn, clyde_spawn = self.map.ghosts_spawns
 
         if blinky_spawn :
             self.ghosts.append(Blinky(blinky_spawn))
@@ -64,6 +63,7 @@ class PacEnv(gym.Env):
         # Get the number of pacgum to eat
         self.nb_pacgum_start = np.sum(self.map.type_map == GUM)
         self.nb_pacgum = self.nb_pacgum_start
+
 
         # ---------------------------------------------------------------------
         # Define the action space (up, down, left, right)
@@ -86,7 +86,7 @@ class PacEnv(gym.Env):
         info = {}
         done = False
 
-        # Handle the actions of the agents
+        # Handle the actions of the pacman agents
         for agent_index, action in enumerate(actions):
 
             # Select the agent
@@ -103,107 +103,96 @@ class PacEnv(gym.Env):
             # Apply the action
             candidate_position = agent.position + ACTION_MAP[action]
 
-            # Ensure the candidate position is valid
-            if candidate_position[0] < 0 or candidate_position[0] >= self.map.type_map.shape[0] or candidate_position[1] < 0 or candidate_position[1] >= self.map.type_map.shape[1] :
-                # Check if the position at the opposite side is valid, if yes then move the agent to the opposite side
-                if candidate_position[0] < 0:
-                    candidate_position[0] = self.map.type_map.shape[0] - 1
-                elif candidate_position[0] >= self.map.type_map.shape[0]:
-                    candidate_position[0] = 0
-                elif candidate_position[1] < 0:
-                    candidate_position[1] = self.map.type_map.shape[1] - 1
-                elif candidate_position[1] >= self.map.type_map.shape[1]:
-                    candidate_position[1] = 0
-                else :
-                    # Candidate position is invalid
-                    rewards[agent_index] = REWARDS["RW_NO_MOVE"]
+            # Restrain the candidate position to the map size (portal effect)
+            candidate_position = (candidate_position + self.map.type_map.shape) % self.map.type_map.shape
 
-            if self.map.type_map[candidate_position[0], candidate_position[1]] in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
-                # Candidate position is a wall or another pacman agent, do nothing
+            # Get the type of the candidate cell
+            candidate_cell_type = self.map.type_map[tuple(candidate_position)]
+
+            # Handle action/rewards based on the candidate cell type
+            if candidate_cell_type in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
                 rewards[agent_index] = REWARDS["RW_NO_MOVE"]
-            else :
-                # Candidate position is valid check the cell type
+                continue
 
-                candidate_cell_type = self.map.type_map[candidate_position[0], candidate_position[1]]
-                # Handle rewards based on cell type
-                if candidate_cell_type == GUM:
-                    rewards[agent_index] = REWARDS["RW_GUM"]
-                    agent.pacgum_eaten += 1
-                    self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+            elif candidate_cell_type == GUM:
+                # Pick it up
+                self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                agent.pacgum_eaten += 1
+                # Reward the agent
+                rewards[agent_index] = REWARDS["RW_GUM"]
 
-                    self.nb_pacgum -= 1
+            elif candidate_cell_type == SUPER_GUM:
+                # Pick it up
+                self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                # Set the superpower step left
+                agent.superpower_step_left = 60
+                # Reward the agent
+                rewards[agent_index] = REWARDS["RW_SUPER_GUM"]
 
-                elif candidate_cell_type == SUPER_GUM:
-                    rewards[agent_index] = REWARDS["RW_SUPER_GUM"]
-                    self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
-                    agent.superpower_step_left = 30
+            elif candidate_cell_type == EMPTY:
+                rewards[agent_index] = REWARDS["RW_EMPTY"]
 
-                elif candidate_cell_type == EMPTY:
-                    rewards[agent_index] = REWARDS["RW_EMPTY"]
+            # Check for pacman collision with the ghosts (here pacman collides with ghost)
+            for ghost in self.ghosts:
+                # Check if pacman is colliding with the ghost
+                if np.all(ghost.position == candidate_position):
+                    # Check if the agent is in super pacman mode
+                    if agent.superpower_step_left > 0:
+                        # Kill the ghost
+                        ghost.reset()
+                        # Reward the agent
+                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
+                    else:
+                        # Kill the pacman
+                        agent.alive = False
+                        self.alive_agents -= 1
+                        # Reward the agent
+                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
-                for ghost in self.ghosts:
-                    if np.all(ghost.position == candidate_position):
-                        # Check if the agent is in super pacman mode
-                        if agent.superpower_step_left > 0:
-                            rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
-
-                            # Set the ghost to the ghost house
-                            for ghost in self.ghosts:
-                                if np.all(ghost.position == candidate_position):
-                                    ghost.reset()
-                        else:
-                            agent.alive = False
-                            self.alive_agents -= 1
-                            rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
-
-                        # Break the loop as the agent is not supposed to collide with multiple ghosts
-                        break
-
-                # Move the agent
-                agent.position = candidate_position
+            # Move the agent
+            agent.position = candidate_position
 
 
         for ghost in self.ghosts:
-            # Maybe the ghost is locked then it can't move
+            # If the ghost is not free then skip its turn
             if not ghost.is_free:
                 continue
 
             # Choose the direction
-            direction = ghost.choose_direction(self.map.type_map)
+            ghost_action = ghost.choose_direction(self.map.type_map)
+            candidate_ghost_position = ghost.position + ACTION_MAP[ghost_action]
 
-            if direction == 0:
-                candidate_ghost_position = ghost.position + np.array([-1, 0])
-            elif direction == 1:
-                candidate_ghost_position = ghost.position + np.array([1, 0])
-            elif direction == 2:
-                candidate_ghost_position = ghost.position + np.array([0, -1])
-            elif direction == 3:
-                candidate_ghost_position = ghost.position + np.array([0, 1])
-            else :
-                continue
+            # Check if the candidate position is valid
+            candidate_ghost_position = (candidate_ghost_position + self.map.type_map.shape) % self.map.type_map.shape
 
-            if candidate_ghost_position[0] < 0 or candidate_ghost_position[0] >= self.map.type_map.shape[0] or candidate_ghost_position[1] < 0 or candidate_ghost_position[1] >= self.map.type_map.shape[1] :
-                continue
+            # Check if the type of the cell
+            cell_type = self.map.type_map[tuple(candidate_ghost_position)]
 
-            cell_type = self.map.type_map[candidate_ghost_position[0], candidate_ghost_position[1]]
-
+            # If the cell is a wall then the ghost can't move
             if cell_type == WALL:
                 continue
 
-            # If there is a pacman agent on the cell
+            # Check for ghost collision with pacman (here the ghost collides with pacman)
             for agent in self.agents:
-                if np.all(agent.position == candidate_ghost_position):
+                # Check if the ghost is colliding with pacman
+                if np.all(agent.position == candidate_ghost_position) and agent.alive:
+                    # Check if the pacman agent is in super pacman mode
                     if agent.superpower_step_left > 0:
-                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
+                        # Kill the ghost
                         ghost.reset()
+                        # Reward the pacman agent
+                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
                     else:
+                        # Kill the pacman
                         agent.alive = False
-                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
                         self.alive_agents -= 1
+                        # Reward the pacman agent
+                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
+            # Move the ghost
             ghost.position = candidate_ghost_position
 
-
+        # Increase the step count of the episode
         self.current_step += 1
 
 
@@ -217,7 +206,7 @@ class PacEnv(gym.Env):
             }
 
         # Check if all the agents are dead
-        elif self.alive_agents == 0:
+        elif self.alive_agents <= 0:
             done = True
 
             info = {

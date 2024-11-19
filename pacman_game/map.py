@@ -106,23 +106,24 @@ class Map :
         '''
         self.ghosts_agents_spawns = []
         # The agents are represented by the numbers 3, 4, 5, 6 on the type_map
-        self.blinky_spawn = np.where(self.type_map == 3)
+
+        self.inky_spawn = np.where(self.type_map == 3)
+        if len(self.inky_spawn[0]) == 0:
+            self.inky_spawn = None
+        else:
+            self.inky_spawn = list(zip(self.inky_spawn[0], self.inky_spawn[1]))[0]
+
+        self.blinky_spawn = np.where(self.type_map == 4)
         if len(self.blinky_spawn[0]) == 0:
             self.blinky_spawn = None
         else :
             self.blinky_spawn = list(zip(self.blinky_spawn[0], self.blinky_spawn[1]))[0]
 
-        self.pinky_spawn = np.where(self.type_map == 4)
+        self.pinky_spawn = np.where(self.type_map == 5)
         if len(self.pinky_spawn[0]) == 0:
             self.pinky_spawn = None
         else:
             self.pinky_spawn = list(zip(self.pinky_spawn[0], self.pinky_spawn[1]))[0]
-
-        self.inky_spawn = np.where(self.type_map == 5)
-        if len(self.inky_spawn[0]) == 0:
-            self.inky_spawn = None
-        else:
-            self.inky_spawn = list(zip(self.inky_spawn[0], self.inky_spawn[1]))[0]
 
         self.clyde_spawn = np.where(self.type_map == 6)
         if len(self.clyde_spawn[0]) == 0:
@@ -130,7 +131,7 @@ class Map :
         else :
             self.clyde_spawn = list(zip(self.clyde_spawn[0], self.clyde_spawn[1]))[0]
 
-        return self.blinky_spawn, self.pinky_spawn, self.inky_spawn, self.clyde_spawn
+        return self.inky_spawn, self.blinky_spawn, self.pinky_spawn, self.clyde_spawn
 
     def reset(self):
         self.tile_map = self.initial_tile_map.copy()
