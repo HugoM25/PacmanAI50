@@ -9,16 +9,21 @@ from pacman_game.ghosts import *
 
 MAX_STEPS = 5000
 
-
 REWARDS = {
     "RW_GUM": 2,
     "RW_SUPER_GUM": 0,
-    "RW_EMPTY": 0,
+    "RW_EMPTY": 0.00,
     "RW_NO_MOVE": 0,
     "RW_DYING_TO_GHOST": 0,
-    "RW_DYING_TO_GHOST": 10,
-    "RW_EATING_GHOST": 10,
+    "RW_EATING_GHOST": 0.6,
     "RW_WINNING": 100
+}
+
+ACTION_MAP = {
+    0: np.array([-1, 0]),  # Up
+    1: np.array([1, 0]),   # Down
+    2: np.array([0, -1]),  # Left
+    3: np.array([0, 1]),   # Right
 }
 
 class PacEnv(gym.Env):
@@ -56,6 +61,10 @@ class PacEnv(gym.Env):
         # Get the number of ghosts
         self.nb_ghosts = len(self.ghosts)
 
+        # Get the number of pacgum to eat
+        self.nb_pacgum_start = np.sum(self.map.type_map == GUM)
+        self.nb_pacgum = self.nb_pacgum_start
+
         # ---------------------------------------------------------------------
         # Define the action space (up, down, left, right)
         self.action_space = spaces.MultiDiscrete(4)
@@ -67,10 +76,11 @@ class PacEnv(gym.Env):
         self.flatten_observation = flatten_observation
 
 
+
     def step(self, actions):
 
         # Initialize the rewards for all agents
-        rewards = [0] * self.nb_agents
+        rewards = np.zeros(self.nb_agents)
 
         truncated = False
         info = {}
@@ -78,9 +88,11 @@ class PacEnv(gym.Env):
 
         # Handle the actions of the agents
         for agent_index, action in enumerate(actions):
+
             # Select the agent
             agent = self.agents[agent_index]
 
+            # Check if the agent is alive
             if not agent.alive:
                 continue
 
@@ -89,14 +101,7 @@ class PacEnv(gym.Env):
                 agent.superpower_step_left -= 1
 
             # Apply the action
-            if action == 0:
-                candidate_position = agent.position + np.array([-1, 0])
-            elif action == 1:
-                candidate_position = agent.position + np.array([1, 0])
-            elif action == 2:
-                candidate_position = agent.position + np.array([0, -1])
-            elif action == 3:
-                candidate_position = agent.position + np.array([0, 1])
+            candidate_position = agent.position + ACTION_MAP[action]
 
             # Ensure the candidate position is valid
             if candidate_position[0] < 0 or candidate_position[0] >= self.map.type_map.shape[0] or candidate_position[1] < 0 or candidate_position[1] >= self.map.type_map.shape[1] :
@@ -125,6 +130,8 @@ class PacEnv(gym.Env):
                     rewards[agent_index] = REWARDS["RW_GUM"]
                     agent.pacgum_eaten += 1
                     self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+
+                    self.nb_pacgum -= 1
 
                 elif candidate_cell_type == SUPER_GUM:
                     rewards[agent_index] = REWARDS["RW_SUPER_GUM"]
@@ -203,19 +210,31 @@ class PacEnv(gym.Env):
         # Check if the max steps are reached
         if self.current_step >= self.max_steps :
             done = True
+            truncated = True
+
+            info = {
+                "end_cause": "Episode truncated. Max steps reached"
+            }
 
         # Check if all the agents are dead
         elif self.alive_agents == 0:
             done = True
 
-        # Check if all the pacgum are eaten
-        elif np.sum(self.map.type_map == GUM) == 0:
-            # Give rewards based on steps left
-            # Print the agent alive
+            info = {
+                "end_cause": "Episode done. All the agents are dead"
+            }
 
-            rewards = [(self.max_steps/self.current_step) * REWARDS["RW_WINNING"] for agent in self.agents if agent.alive]
-            print(rewards)
+        # Check if all the pacgum are eaten
+        elif self.nb_pacgum == 0:
+            # Give rewards based on steps left to the agents alive
+            for agent in self.agents:
+                rewards[agent_index] = REWARDS["RW_WINNING"] / self.alive_agents
+
             done = True
+
+            info = {
+                "end_cause": "Episode done. All the pacgum are eaten"
+            }
 
         # Get the observations
         observations = self._get_observations()
@@ -266,7 +285,8 @@ class PacEnv(gym.Env):
 
         for ghost in self.ghosts:
             ghost.reset()
-        print("Reset done")
+
+        self.nb_pacgum = self.nb_pacgum_start
 
         return self._get_observations(), info
 
