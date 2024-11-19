@@ -72,6 +72,10 @@ class PacEnv(gym.Env):
             if not agent.is_alive:
                 continue
 
+            # Decrease the superpower step left
+            if agent.superpower_step_left > 0:
+                agent.superpower_step_left -= 1
+
             # Apply the action
             if action == 0:
                 candidate_position = agent.position + np.array([-1, 0])
@@ -94,7 +98,6 @@ class PacEnv(gym.Env):
                 elif candidate_position[1] >= self.map.type_map.shape[1]:
                     candidate_position[1] = 0
 
-
             if self.map.type_map[candidate_position[0], candidate_position[1]] in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
                 # Candidate position is a wall or another pacman agent, do nothing
                 rewards[agent_index] = 0
@@ -111,21 +114,29 @@ class PacEnv(gym.Env):
                 elif candidate_cell_type == SUPER_GUM:
                     rewards[agent_index] = 0
                     self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                    agent.superpower_step_left = 30
 
                 elif candidate_cell_type == EMPTY:
                     rewards[agent_index] = 0
 
-                elif candidate_cell_type in [GHOST_BLINKY, GHOST_PINKY, GHOST_INKY, GHOST_CLYDE]:
-                    # The agent is dead
-                    agent.is_alive = False
-                    rewards[agent_index] = 0
-                    self.alive_agents -= 1
+                for ghost in self.ghosts:
+                    if np.all(ghost.position == candidate_position):
+                        # Check if the agent is in super pacman mode
+                        if agent.superpower_step_left > 0:
+                            rewards[agent_index] = 10
+
+                            # Set the ghost to the ghost house
+                            for ghost in self.ghosts:
+                                if np.all(ghost.position == candidate_position):
+                                    ghost.reset()
+                        else:
+                            agent.is_alive = False
+                            self.alive_agents -= 1
+                            rewards[agent_index] = 0
 
                 # Move the agent
                 agent.position = candidate_position
 
-        # Handle the ghosts actions
-        # TODO : Handle ALL the ghosts actions
 
         for ghost in self.ghosts:
             # Maybe the ghost is locked then it can't move
@@ -157,9 +168,13 @@ class PacEnv(gym.Env):
             # If there is a pacman agent on the cell
             for agent in self.agents:
                 if np.all(agent.position == candidate_ghost_position):
-                    agent.is_alive = False
-                    rewards[agent_index] = 0
-                    self.alive_agents -= 1
+                    if agent.superpower_step_left > 0:
+                        rewards[agent_index] += 10
+                        ghost.reset()
+                    else:
+                        agent.is_alive = False
+                        rewards[agent_index] = 0
+                        self.alive_agents -= 1
 
             ghost.position = candidate_ghost_position
 

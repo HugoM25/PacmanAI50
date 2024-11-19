@@ -20,12 +20,15 @@ class Pacman() :
 
         self.alive = True
 
+        self.superpower_step_left = 0
+
     def reset(self) :
         self.position = self.start_pos
         self.score = 0
         self.current_animation = self.idle_anim
         self.is_alive = True
         self.pacgum_eaten = 0
+        self.superpower_step_left = 0
 
 
 
