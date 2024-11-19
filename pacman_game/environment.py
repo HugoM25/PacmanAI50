@@ -145,9 +145,12 @@ class PacEnv(gym.Env):
                                 if np.all(ghost.position == candidate_position):
                                     ghost.reset()
                         else:
-                            agent.is_alive = False
+                            agent.alive = False
                             self.alive_agents -= 1
                             rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
+
+                        # Break the loop as the agent is not supposed to collide with multiple ghosts
+                        break
 
                 # Move the agent
                 agent.position = candidate_position
@@ -187,9 +190,9 @@ class PacEnv(gym.Env):
                         rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
                         ghost.reset()
                     else:
-                        agent.is_alive = False
-                        rewards[agent_index] = 0
-                        self.alive_agents = REWARDS["RW_DYING_TO_GHOST"]
+                        agent.alive = False
+                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
+                        self.alive_agents -= 1
 
             ghost.position = candidate_ghost_position
 
