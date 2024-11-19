@@ -10,12 +10,12 @@ from pacman_game.ghosts import *
 MAX_STEPS = 5000
 
 REWARDS = {
-    "RW_GUM": 2,
-    "RW_SUPER_GUM": 0,
-    "RW_EMPTY": 0.00,
-    "RW_NO_MOVE": 0,
-    "RW_DYING_TO_GHOST": 0,
-    "RW_EATING_GHOST": 0.6,
+    "RW_GUM": 10,
+    "RW_SUPER_GUM": 10,
+    "RW_EMPTY": -1,
+    "RW_NO_MOVE": -1,
+    "RW_DYING_TO_GHOST": -500,
+    "RW_EATING_GHOST": 50,
     "RW_WINNING": 100
 }
 
@@ -118,6 +118,7 @@ class PacEnv(gym.Env):
                 # Pick it up
                 self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
                 agent.pacgum_eaten += 1
+                self.nb_pacgum -= 1
                 # Reward the agent
                 rewards[agent_index] = REWARDS["RW_GUM"]
 
@@ -158,8 +159,9 @@ class PacEnv(gym.Env):
             if not ghost.is_free:
                 continue
 
+            pacman_positions = [agent.position for agent in self.agents if agent.alive]
             # Choose the direction
-            ghost_action = ghost.choose_direction(self.map.type_map)
+            ghost_action = ghost.choose_direction(self.map.type_map, pacman_positions)
             candidate_ghost_position = ghost.position + ACTION_MAP[ghost_action]
 
             # Check if the candidate position is valid

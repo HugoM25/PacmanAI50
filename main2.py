@@ -32,23 +32,32 @@ class PolicyNetwork(nn.Module):
         obs_shape = env.observation_space.shape
 
         # Convolutional layers
+        # self.conv_net = nn.Sequential(
+        #     nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
+        #     nn.ReLU(),
+        #     nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
+        #     nn.ReLU()
+        # )
+
+        # # Calculate the size of the feature map after conv layers
+        # conv_out_size = 64 * obs_shape[0] * obs_shape[1]
+
         self.conv_net = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),  # Conv1
             nn.ReLU(),
-            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),  # Conv2
             nn.ReLU()
         )
+        conv_out_size = 32 * obs_shape[0] * obs_shape[1]  # Assuming no downsampling in convolutions
 
-        # Calculate the size of the feature map after conv layers
-        conv_out_size = 64 * obs_shape[0] * obs_shape[1]
 
         # Fully connected layers
         self.fc_net = nn.Sequential(
-            nn.Linear(conv_out_size, 128),
+            nn.Linear(conv_out_size, 256),
             nn.ReLU(),
-            nn.Linear(128, 4)  # Output layer for Q-values
+            nn.Linear(256, 4)  # Output layer for Q-values
         )
 
     def forward(self, x):
