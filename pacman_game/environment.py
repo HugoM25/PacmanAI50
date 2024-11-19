@@ -81,7 +81,7 @@ class PacEnv(gym.Env):
             # Select the agent
             agent = self.agents[agent_index]
 
-            if not agent.is_alive:
+            if not agent.alive:
                 continue
 
             # Decrease the superpower step left
@@ -199,18 +199,22 @@ class PacEnv(gym.Env):
 
         self.current_step += 1
 
-        # Check if all the pacgum are eaten
-        if np.sum(self.map.type_map == GUM) == 0:
-            # Give rewards based on steps left
-            rewards = [(self.max_steps/self.current_step) * REWARDS["RW_WINNING"] for agent in self.agents if agent.alive]
-            done = True
 
         # Check if the max steps are reached
         if self.current_step >= self.max_steps :
             done = True
 
         # Check if all the agents are dead
-        if self.alive_agents == 0:
+        elif self.alive_agents == 0:
+            done = True
+
+        # Check if all the pacgum are eaten
+        elif np.sum(self.map.type_map == GUM) == 0:
+            # Give rewards based on steps left
+            # Print the agent alive
+
+            rewards = [(self.max_steps/self.current_step) * REWARDS["RW_WINNING"] for agent in self.agents if agent.alive]
+            print(rewards)
             done = True
 
         # Get the observations
@@ -220,23 +224,22 @@ class PacEnv(gym.Env):
 
     def _get_observation_for_agent(self, agent_index):
         # Take the map
-        map = self.map.type_map.copy()
+        map_copy = self.map.type_map.copy()
 
         # Put the pacman agent on the map
         for index, pacman_agent in enumerate(self.agents):
-            if index == agent_index:
-                map[pacman_agent.position[0], pacman_agent.position[1]] = PACMAN
-            else :
-                map[pacman_agent.position[0], pacman_agent.position[1]] = PACMAN_RIVAL
+            if pacman_agent.alive :
+                if index == agent_index:
+                    map_copy[tuple(pacman_agent.position)] = PACMAN
+                else :
+                    map_copy[tuple(pacman_agent.position)] = PACMAN_RIVAL
 
         # Put the ghost agent on the map
         for ghost in self.ghosts:
-            map[ghost.position[0], ghost.position[1]] = ghost.ghost_type
+            map_copy[tuple(ghost.position)] = ghost.ghost_type
 
-        if self.flatten_observation:
-            return map.flatten()
+        return map_copy.flatten() if self.flatten_observation else map_copy
 
-        return map
 
     def _get_observations(self):
         # Get observations for all agents

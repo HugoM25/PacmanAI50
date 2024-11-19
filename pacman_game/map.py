@@ -160,7 +160,7 @@ class Map :
 
         # Add the pacman agents to the image
         for pacman in pacman_agents:
-            if pacman.is_alive:
+            if pacman.alive:
                 map_img[pacman.position[0]*self.tile_size:(pacman.position[0]+1)*self.tile_size, pacman.position[1]*self.tile_size:(pacman.position[1]+1)*self.tile_size] = self.tiles[6]
 
         # Add the ghost agents to the image

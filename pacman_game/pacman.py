@@ -26,7 +26,7 @@ class Pacman() :
         self.position = self.start_pos
         self.score = 0
         self.current_animation = self.idle_anim
-        self.is_alive = True
+        self.alive = True
         self.pacgum_eaten = 0
         self.superpower_step_left = 0
 
