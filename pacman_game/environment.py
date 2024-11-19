@@ -9,6 +9,18 @@ from pacman_game.ghosts import *
 
 MAX_STEPS = 5000
 
+
+REWARDS = {
+    "RW_GUM": 2,
+    "RW_SUPER_GUM": 0,
+    "RW_EMPTY": 0,
+    "RW_NO_MOVE": 0,
+    "RW_DYING_TO_GHOST": 0,
+    "RW_DYING_TO_GHOST": 10,
+    "RW_EATING_GHOST": 10,
+    "RW_WINNING": 100
+}
+
 class PacEnv(gym.Env):
     def __init__(self, level_folder_path:str, flatten_observation:bool = False):
         super().__init__()
@@ -97,33 +109,36 @@ class PacEnv(gym.Env):
                     candidate_position[1] = self.map.type_map.shape[1] - 1
                 elif candidate_position[1] >= self.map.type_map.shape[1]:
                     candidate_position[1] = 0
+                else :
+                    # Candidate position is invalid
+                    rewards[agent_index] = REWARDS["RW_NO_MOVE"]
 
             if self.map.type_map[candidate_position[0], candidate_position[1]] in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
                 # Candidate position is a wall or another pacman agent, do nothing
-                rewards[agent_index] = 0
+                rewards[agent_index] = REWARDS["RW_NO_MOVE"]
             else :
                 # Candidate position is valid check the cell type
 
                 candidate_cell_type = self.map.type_map[candidate_position[0], candidate_position[1]]
                 # Handle rewards based on cell type
                 if candidate_cell_type == GUM:
-                    rewards[agent_index] = 2
+                    rewards[agent_index] = REWARDS["RW_GUM"]
                     agent.pacgum_eaten += 1
                     self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
 
                 elif candidate_cell_type == SUPER_GUM:
-                    rewards[agent_index] = 0
+                    rewards[agent_index] = REWARDS["RW_SUPER_GUM"]
                     self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
                     agent.superpower_step_left = 30
 
                 elif candidate_cell_type == EMPTY:
-                    rewards[agent_index] = 0
+                    rewards[agent_index] = REWARDS["RW_EMPTY"]
 
                 for ghost in self.ghosts:
                     if np.all(ghost.position == candidate_position):
                         # Check if the agent is in super pacman mode
                         if agent.superpower_step_left > 0:
-                            rewards[agent_index] = 10
+                            rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
 
                             # Set the ghost to the ghost house
                             for ghost in self.ghosts:
@@ -132,7 +147,7 @@ class PacEnv(gym.Env):
                         else:
                             agent.is_alive = False
                             self.alive_agents -= 1
-                            rewards[agent_index] = 0
+                            rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
                 # Move the agent
                 agent.position = candidate_position
@@ -169,12 +184,12 @@ class PacEnv(gym.Env):
             for agent in self.agents:
                 if np.all(agent.position == candidate_ghost_position):
                     if agent.superpower_step_left > 0:
-                        rewards[agent_index] += 10
+                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
                         ghost.reset()
                     else:
                         agent.is_alive = False
                         rewards[agent_index] = 0
-                        self.alive_agents -= 1
+                        self.alive_agents = REWARDS["RW_DYING_TO_GHOST"]
 
             ghost.position = candidate_ghost_position
 
@@ -184,7 +199,7 @@ class PacEnv(gym.Env):
         # Check if all the pacgum are eaten
         if np.sum(self.map.type_map == GUM) == 0:
             # Give rewards based on steps left
-            rewards = [(self.max_steps/self.current_step) * 100 for agent in self.agents if agent.alive]
+            rewards = [(self.max_steps/self.current_step) * REWARDS["RW_WINNING"] for agent in self.agents if agent.alive]
             done = True
 
         # Check if the max steps are reached
