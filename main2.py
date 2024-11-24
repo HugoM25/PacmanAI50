@@ -23,6 +23,10 @@ EPSILON_DECAY = 10000
 TARGET_UPDATE_FREQ = 1000
 MIN_REPLAY_SIZE = 1000
 
+# Check if CUDA is available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+print(f"Using device: {device}")
 
 class PolicyNetwork(nn.Module):
     def __init__(self, env):
@@ -70,7 +74,7 @@ class PolicyNetwork(nn.Module):
         return self.fc_net(conv_out)
 
     def act(self, obs):
-        obs_t = torch.as_tensor(obs, dtype=torch.float32)
+        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
         q_values = self(obs_t.unsqueeze(0))
 
         action = torch.argmax(q_values, dim=1)[0].item()
@@ -86,8 +90,16 @@ reward_buffer = deque([0.0], maxlen=100)
 
 episode_reward = 0.0
 
-online_net = PolicyNetwork(env)
-target_net = PolicyNetwork(env)
+online_net = PolicyNetwork(env).to(device)
+target_net = PolicyNetwork(env).to(device)
+
+# Load the model if a pre-trained model exists
+path_to_model = "pacman_torch_model_1080000.pth"
+if os.path.exists(path_to_model):
+    online_net.load_state_dict(torch.load(path_to_model))
+    print("Model loaded successfully.")
+else:
+    print("No model found, starting from scratch.")
 
 target_net.load_state_dict(online_net.state_dict())
 optimizer = torch.optim.Adam(online_net.parameters(), lr=5e-4)
@@ -154,11 +166,11 @@ for step in itertools.count():
         dones = np.asarray([t[4] for t in transitions])
 
         # Convert to tensors
-        obses_t = torch.as_tensor(obses, dtype=torch.float32)
-        actions_t = torch.as_tensor(actions, dtype=torch.int64).unsqueeze(-1)
-        rewards_t = torch.as_tensor(rewards, dtype=torch.float32).unsqueeze(-1)
-        next_obses_t = torch.as_tensor(next_obses, dtype=torch.float32)
-        dones_t = torch.as_tensor(dones, dtype=torch.float32).unsqueeze(-1)
+        obses_t = torch.as_tensor(obses, dtype=torch.float32, device=device)
+        actions_t = torch.as_tensor(actions, dtype=torch.int64, device=device).unsqueeze(-1)
+        rewards_t = torch.as_tensor(rewards, dtype=torch.float32, device=device).unsqueeze(-1)
+        next_obses_t = torch.as_tensor(next_obses, dtype=torch.float32, device=device)
+        dones_t = torch.as_tensor(dones, dtype=torch.float32, device=device).unsqueeze(-1)
 
         # Compute targets
         target_q_values = target_net(next_obses_t)
