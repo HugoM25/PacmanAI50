@@ -11,7 +11,7 @@ import itertools
 import random
 import cv2
 
-from trainer import Trainer
+from trainers.trainer import Trainer
 
 
 class PPOTrainer(Trainer):

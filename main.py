@@ -1,7 +1,6 @@
 from pacman_game import PacmanEnv
-from dqn_trainer import DQNTrainer
-from ppo_trainer import PPOTrainer
-from PacmanAI50.models import *
+from trainers import DQNTrainer, PPOTrainer
+from models import *
 
 if __name__ == "__main__":
     # Initialize the environment
