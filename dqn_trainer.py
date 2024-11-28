@@ -34,15 +34,6 @@ class PolicyNetwork1(nn.Module):
     def forward(self, x):
         return self.network(x)
 
-    def act(self, obs):
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
-        q_values = self(obs_t.unsqueeze(0))
-
-        max_q = torch.argmax(q_values, dim=1)[0]
-        action = max_q.detach().item()
-
-        return action
-
 class PolicyNetwork2(nn.Module):
     '''
     Policy network for DQN
@@ -59,9 +50,9 @@ class PolicyNetwork2(nn.Module):
         output_size = 4
 
         self.conv_net = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1),
             nn.ReLU()
         )
 
@@ -75,7 +66,6 @@ class PolicyNetwork2(nn.Module):
         )
 
     def forward(self, x):
-
         # Add channel dimension for Conv2D input (batch, channels, height, width)
         x = x.unsqueeze(1)
 
@@ -86,12 +76,7 @@ class PolicyNetwork2(nn.Module):
         # Pass through fully connected layers
         return self.fc_net(conv_out)
 
-    def act(self, obs):
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
-        q_values = self(obs_t.unsqueeze(0))
 
-        action = torch.argmax(q_values, dim=1)[0].item()
-        return action
 
 class DQNTrainer(Trainer):
     '''
@@ -129,13 +114,10 @@ class DQNTrainer(Trainer):
         self.online_net = model.to(device)
         self.target_net = model.to(device)
 
-        # Does model need to be flattened
-        self.env.flatten_observation = self.online_net.need_flatten_input
-
         #Initialize optimizer
         self.optimizer = torch.optim.Adam(self.online_net.parameters())
 
-    def load_existing_model(self, model_path: str) -> None:
+    def load_model(self, model_path: str) -> None:
         '''
         Load existing model
         @param model_path: Path to the model
@@ -147,7 +129,7 @@ class DQNTrainer(Trainer):
         else :
             raise ValueError("Model path does not exist")
 
-    def train(self):
+    def train(self, num_iterations: int) -> None:
         '''
         Train the model
         '''
@@ -185,6 +167,9 @@ class DQNTrainer(Trainer):
 
         for step in itertools.count():
 
+            if step >= num_iterations:
+                break
+
             actions = [0 for _ in range(self.env.nb_agents)]
 
             # Gather the actions for the different agents
@@ -196,7 +181,10 @@ class DQNTrainer(Trainer):
                 if random_sample < epsilon:
                     actions[agent_index] = self.env.action_space.sample()
                 else:
-                    actions[agent_index] = self.online_net.act(observations[agent_index])
+                    # Convert obs to tensor
+                    obs_tensor = torch.as_tensor(observations[agent_index], dtype=torch.float32, device=self.device)
+                    # Get the action from the online network (forwards pass + argmax)
+                    actions[agent_index] = torch.argmax(self.online_net(obs_tensor.unsqueeze(0))).item()
 
             # Step the environment
             next_observations, rewards, done, truncated , info = self.env.step(actions)

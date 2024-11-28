@@ -1,13 +1,13 @@
 import numpy as np
 import gymnasium as gym
-from gymnasium.spaces import Discrete, Box
+from gymnasium import spaces
 
 
 from pacman_game.map import *
 from pacman_game.pacman import Pacman
 from pacman_game.ghosts import *
 
-MAX_STEPS = 1000
+MAX_STEPS = 5000
 
 REWARDS = {
     "RW_GUM": 10,
@@ -27,25 +27,19 @@ ACTION_MAP = {
 }
 
 class PacmanEnv(gym.Env):
-
-    metadata = {"render_modes": ["human"], "name": "pacman-env-v0"}
-
-    def __init__(self, level_folder_path:str, flatten_observation:bool = False, render_mode="human"):
+    def __init__(self, level_folder_path:str, flatten_observation:bool = False):
         super().__init__()
-
-        self.render_mode = render_mode
-        self.max_steps = MAX_STEPS
 
         # Load the map
         self.map = Map(level_folder_path)
 
         # Parse the number of players and the initial positions ---------------
-        self.possible_agents: Pacman = []
+        self.agents: Pacman = []
         for _, spawn_position in enumerate(self.map.pacman_spawns):
-            self.possible_agents.append(Pacman(spawn_position))
+            self.agents.append(Pacman(spawn_position))
 
         # Get the number of agents
-        self.nb_agents = len(self.possible_agents)
+        self.nb_agents = len(self.agents)
         self.alive_agents = self.nb_agents
 
         self.current_step = 0
@@ -70,15 +64,15 @@ class PacmanEnv(gym.Env):
         self.nb_pacgum_start = np.sum(self.map.type_map == GUM)
         self.nb_pacgum = self.nb_pacgum_start
 
+
         # ---------------------------------------------------------------------
         # Define the action space (up, down, left, right)
-        self.action_spaces = {
-            agent: Discrete(4) for agent in self.possible_agents
-        }
+        self.action_space = spaces.MultiDiscrete(4)
+        self.possible_actions = 4
 
-        self.observation_spaces = {
-            agent: Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8) for agent in self.possible_agents
-        }
+        # Define the observation space
+        # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
+        self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
 
         self.flatten_observation = flatten_observation
 
@@ -87,23 +81,17 @@ class PacmanEnv(gym.Env):
     def step(self, actions):
 
         # Initialize the rewards for all agents
-        rewards = {agent: 0 for agent in self.agents}
-        # Initialize the done flag
-        terminations = {agent: False for agent in self.agents}
-        # Initialize the truncated flag
-        truncations = {agent: False for agent in self.agents}
-        # Initialize the info dict
-        infos = {agent: {} for agent in self.agents}
+        rewards = np.zeros(self.nb_agents)
 
-
-        # Increase the step count of the episode
-        self.current_step += 1
+        truncated = False
+        info = {}
+        done = False
 
         # Handle the actions of the pacman agents
         for agent_index, action in enumerate(actions):
 
             # Select the agent
-            agent = self.possible_agents[agent_index]
+            agent = self.agents[agent_index]
 
             # Check if the agent is alive
             if not agent.alive:
@@ -124,7 +112,7 @@ class PacmanEnv(gym.Env):
 
             # Handle action/rewards based on the candidate cell type
             if candidate_cell_type in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
-                rewards[agent] = REWARDS["RW_NO_MOVE"]
+                rewards[agent_index] = REWARDS["RW_NO_MOVE"]
                 continue
 
             elif candidate_cell_type == GUM:
@@ -133,7 +121,7 @@ class PacmanEnv(gym.Env):
                 agent.pacgum_eaten += 1
                 self.nb_pacgum -= 1
                 # Reward the agent
-                rewards[agent] = REWARDS["RW_GUM"]
+                rewards[agent_index] = REWARDS["RW_GUM"]
 
             elif candidate_cell_type == SUPER_GUM:
                 # Pick it up
@@ -141,10 +129,10 @@ class PacmanEnv(gym.Env):
                 # Set the superpower step left
                 agent.superpower_step_left = 60
                 # Reward the agent
-                rewards[agent] = REWARDS["RW_SUPER_GUM"]
+                rewards[agent_index] = REWARDS["RW_SUPER_GUM"]
 
             elif candidate_cell_type == EMPTY:
-                rewards[agent] = REWARDS["RW_EMPTY"]
+                rewards[agent_index] = REWARDS["RW_EMPTY"]
 
             # Check for pacman collision with the ghosts (here pacman collides with ghost)
             for ghost in self.ghosts:
@@ -155,13 +143,13 @@ class PacmanEnv(gym.Env):
                         # Kill the ghost
                         ghost.reset()
                         # Reward the agent
-                        rewards[agent] = REWARDS["RW_EATING_GHOST"]
+                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
                     else:
                         # Kill the pacman
                         agent.alive = False
                         self.alive_agents -= 1
                         # Reward the agent
-                        rewards[agent] = REWARDS["RW_DYING_TO_GHOST"]
+                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
             # Move the agent
             agent.position = candidate_position
@@ -172,7 +160,7 @@ class PacmanEnv(gym.Env):
             if not ghost.is_free:
                 continue
 
-            pacman_positions = [agent.position for agent in self.possible_agents if agent.alive]
+            pacman_positions = [agent.position for agent in self.agents if agent.alive]
             # Choose the direction
             ghost_action = ghost.choose_direction(self.map.type_map, pacman_positions)
             candidate_ghost_position = ghost.position + ACTION_MAP[ghost_action]
@@ -188,7 +176,7 @@ class PacmanEnv(gym.Env):
                 continue
 
             # Check for ghost collision with pacman (here the ghost collides with pacman)
-            for agent in self.possible_agents:
+            for agent in self.agents:
                 # Check if the ghost is colliding with pacman
                 if np.all(agent.position == candidate_ghost_position) and agent.alive:
                     # Check if the pacman agent is in super pacman mode
@@ -196,24 +184,29 @@ class PacmanEnv(gym.Env):
                         # Kill the ghost
                         ghost.reset()
                         # Reward the pacman agent
-                        rewards[agent] = REWARDS["RW_EATING_GHOST"]
+                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
                     else:
                         # Kill the pacman
                         agent.alive = False
                         self.alive_agents -= 1
                         # Reward the pacman agent
-                        rewards[agent] = REWARDS["RW_DYING_TO_GHOST"]
+                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
             # Move the ghost
             ghost.position = candidate_ghost_position
 
+        # Increase the step count of the episode
+        self.current_step += 1
+
+
         # Check if the max steps are reached
         if self.current_step >= self.max_steps :
-            # For all the agents not dead or winning, give a negative reward for taking too long
-            for agent in self.possible_agents:
-                if agent.alive :
-                    rewards[agent] += REWARDS["RW_NO_MOVE"]
+            done = True
+            truncated = True
 
+            info = {
+                "end_cause": "Episode truncated. Max steps reached"
+            }
 
         # Check if all the agents are dead
         elif self.alive_agents <= 0:
@@ -226,8 +219,8 @@ class PacmanEnv(gym.Env):
         # Check if all the pacgum are eaten
         elif self.nb_pacgum == 0:
             # Give rewards based on steps left to the agents alive
-            for agent in self.possible_agents:
-                rewards[agent] = REWARDS["RW_WINNING"] / self.current_step
+            for agent in self.agents:
+                rewards[agent_index] = REWARDS["RW_WINNING"] / self.alive_agents
 
             done = True
 
@@ -238,21 +231,14 @@ class PacmanEnv(gym.Env):
         # Get the observations
         observations = self._get_observations()
 
-        return observations, rewards, terminations, truncations, infos
+        return observations, rewards, done, truncated, info
 
-
-    def _get_observation_for_agent(self, agent_index: int) -> np.ndarray:
-        '''
-        Get the observation for a specific agent
-        The observation is a 2D array representing the map with the agent on it -
-        The agent is represented by a pacman value and the others by a rival pacman value
-        :param agent_index: the index of the agent
-        @return: the observation
-        '''
+    def _get_observation_for_agent(self, agent_index):
+        # Take the map
         map_copy = self.map.type_map.copy()
 
         # Put the pacman agent on the map
-        for index, pacman_agent in enumerate(self.possible_agents):
+        for index, pacman_agent in enumerate(self.agents):
             if pacman_agent.alive :
                 if index == agent_index:
                     map_copy[tuple(pacman_agent.position)] = PACMAN
@@ -266,46 +252,36 @@ class PacmanEnv(gym.Env):
         return map_copy.flatten() if self.flatten_observation else map_copy
 
 
-    def _get_observations(self) -> list[np.ndarray]:
-        '''
-        Get observations for all agents
-        @return: list of observations
-        '''
-
+    def _get_observations(self):
+        # Get observations for all agents
         observations = []
         for i in range(self.nb_agents) :
             observation = self._get_observation_for_agent(i)
             observations.append(observation)
         return observations
 
-    def reset(self):
-        '''
-        Reset the environment (and setup the env to make sure render(), step(), etc. work correctly)
-        '''
+    def reset(self, seed=None):
 
-        self.agents = self.possible_agents[:]
-        self.rewards = {agent: 0 for agent in self.agents}
-        self._cumulative_rewards = {agent: 0 for agent in self.agents}
-        self.terminations = {agent: False for agent in self.agents}
-        self.truncations = {agent: False for agent in self.agents}
-        self.infos = {agent: {} for agent in self.agents}
-        self.state = {agent: None for agent in self.agents}
-        self.observations = {agent: self._get_observation_for_agent(index) for index, agent in enumerate(self.agents)}
+        info = {}
 
         self.current_step = 0
+        self.max_steps = MAX_STEPS
 
         # Reset the map
         self.map.reset()
 
-        # Reset the ghosts
+        # Reset the agents
+        for agent in self.agents:
+            agent.reset()
+        self.alive_agents = self.nb_agents
+
         for ghost in self.ghosts:
             ghost.reset()
 
-        # Keep track of the number of pacgum to eat
         self.nb_pacgum = self.nb_pacgum_start
 
-        return self.observations, self.infos
+        return self._get_observations(), info
 
 
     def render(self, mode='rgb_array'):
-        return self.map.render(mode, self.possible_agents, self.ghosts)
+        return self.map.render(mode, self.agents, self.ghosts)
