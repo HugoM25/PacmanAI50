@@ -20,7 +20,7 @@ class Trainer:
         '''
         raise NotImplementedError
 
-    def save(self):
+    def save_model(self):
         '''
         Save the model
         '''

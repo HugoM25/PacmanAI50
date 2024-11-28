@@ -11,73 +11,6 @@ import cv2
 
 from trainers.trainer import Trainer
 
-class PolicyNetwork1(nn.Module):
-    '''
-    Policy network for DQN
-    '''
-    def __init__(self, env, device=None):
-        super().__init__()
-
-        self.need_flatten_input = True
-
-        num_inputs = int(np.prod(env.observation_space.shape))
-        num_actions = 4
-
-        self.device = device
-        self.network = nn.Sequential(
-            nn.Linear(num_inputs, 128),
-            nn.Tanh(),
-            nn.Linear(128, num_actions),
-            nn.Tanh(),
-        )
-
-    def forward(self, x):
-        return self.network(x)
-
-class PolicyNetwork2(nn.Module):
-    '''
-    Policy network for DQN
-    '''
-
-    def __init__(self, env, device=None):
-        super().__init__()
-
-        self.need_flatten_input = False
-        self.device = device
-
-        # Get the shape of the input
-        obs_shape = env.observation_space.shape
-        output_size = 4
-
-        self.conv_net = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU()
-        )
-
-        conv_out_size = 32 * obs_shape[0] * obs_shape[1]
-
-        # Fully connected layers
-        self.fc_net = nn.Sequential(
-            nn.Linear(conv_out_size, 256),
-            nn.ReLU(),
-            nn.Linear(256, output_size)
-        )
-
-    def forward(self, x):
-        # Add channel dimension for Conv2D input (batch, channels, height, width)
-        x = x.unsqueeze(1)
-
-        # Pass through conv layers
-        conv_out = self.conv_net(x)
-        # Flatten for FC layers
-        conv_out = conv_out.view(conv_out.size(0), -1)
-        # Pass through fully connected layers
-        return self.fc_net(conv_out)
-
-
-
 class DQNTrainer(Trainer):
     '''
     DQN trainer
@@ -226,7 +159,28 @@ class DQNTrainer(Trainer):
             if step % self.model_save_freq == 0:
                 torch.save(self.online_net.state_dict(), "pacman_torch_model_{}.pth".format(step))
 
+    def get_action(self, obs):
+        # Query the actor network for a mean action.
+        # Same thing as calling self.actor.forward(obs)
 
+        # Convert the observation to a tensor
+        obs = torch.tensor(obs, dtype=torch.float)
+        mean = self.actor(obs.unsqueeze(0))
+
+        # Create our Multivariate Normal Distribution
+        dist = MultivariateNormal(mean, self.cov_mat)
+
+        # Sample an action from the distribution and get its log prob
+        action = dist.sample()
+        log_prob = dist.log_prob(action)
+
+        # Return the sampled action and the log prob of that action
+        # Note that I'm calling detach() since the action and log_prob
+        # are tensors with computation graphs, so I want to get rid
+        # of the graph and just convert the action to numpy array.
+        # log prob as tensor is fine. Our computation graph will
+        # start later down the line.
+        return action.detach().numpy(), log_prob.detach()
 
     def _update_model(self):
         '''

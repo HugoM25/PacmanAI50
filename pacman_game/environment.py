@@ -16,7 +16,7 @@ REWARDS = {
     "RW_NO_MOVE": 0,
     "RW_DYING_TO_GHOST": -500,
     "RW_EATING_GHOST": 50,
-    "RW_WINNING": 100
+    "RW_WINNING": 10000
 }
 
 ACTION_MAP = {
@@ -220,7 +220,7 @@ class PacmanEnv(gym.Env):
         elif self.nb_pacgum == 0:
             # Give rewards based on steps left to the agents alive
             for agent in self.agents:
-                rewards[agent_index] = REWARDS["RW_WINNING"] / self.alive_agents
+                rewards[agent_index] = REWARDS["RW_WINNING"] / self.current_step
 
             done = True
 

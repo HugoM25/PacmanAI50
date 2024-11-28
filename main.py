@@ -1,5 +1,5 @@
 from pacman_game import PacmanEnv
-from trainers import DQNTrainer, PPOTrainer
+from trainers import DQNTrainer, PPOTrainer, NewPPOTrainer
 from models import *
 
 if __name__ == "__main__":
@@ -7,12 +7,12 @@ if __name__ == "__main__":
     environment = PacmanEnv("pacman_game/res/level0/")
 
     # Initialize the trainer
-    trainer = PPOTrainer(environment,
-                         actor_model=NNPPOActor(environment),
-                         critic_model=NNPPOCritic(environment))
+    trainer = NewPPOTrainer(environment,
+                         actor_model=ConvPPOActor(environment),
+                         critic_model=ConvPPOCritic(environment))
 
     #trainer = DQNTrainer(environment, model=NNDQN(environment))
 
     # Perform training
-    trainer.train(50000)
+    trainer.train(500000)
 
