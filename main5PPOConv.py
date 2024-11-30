@@ -100,12 +100,15 @@ def ppo_update(policy, optimizer, trajectories):
     optimizer.step()
 
 # Environnement
-env = PacmanEnv("pacman_game/res/level2/", flatten_observation=False)
+env = PacmanEnv("pacman_game/res/level11/", flatten_observation=False)
 obs_shape = env.observation_space.shape
 num_actions = np.prod(env.action_space.nvec)
 
 # Modèle et optimiseur
 policy = ActorCritic(obs_shape, num_actions).to(device)
+model_path ="ppo_model_episode_3000.pth"
+policy.load_state_dict(torch.load(model_path))
+
 optimizer = optim.Adam(policy.parameters(), lr=LEARNING_RATE)
 
 # Boucle principale d'entraînement
@@ -126,7 +129,11 @@ for i_episode in itertools.count(1):
         action = dist.sample()
 
         next_states, rewards, done, truncated, info = env.step([action.item()])
-        if i_episode % 500 == 0:
+        img = env.render(mode="rgb_array")
+        # cv2.imshow("Pacman", img)
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #     break
+        if i_episode % 50 == 0:
             
             img = env.render(mode="rgb_array")
             cv2.imshow("Pacman", img)
