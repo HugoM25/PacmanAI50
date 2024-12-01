@@ -1,231 +1,184 @@
-from torch import nn
-from torch.distributions import MultivariateNormal
 import torch
-from torch.optim import Adam
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np
+import time
+import cv2
 
 from collections import deque
-import os
-import itertools
-
-import random
-import cv2
 
 from trainers.trainer import Trainer
 
 
 class PPOTrainer(Trainer):
-    def __init__(self, env, actor_model, critic_model, device=None):
+    def __init__(self, env, model, device, optimizer, clip_epsilon, gamma, entropy_coef, value_coef, epochs=4, batch_size=32, n_steps=128):
         self.env = env
+        self.model = model.to(device)
+        self.device = device
+        self.optimizer = optimizer
+        self.clip_epsilon = clip_epsilon
+        self.gamma = gamma
+        self.entropy_coef = entropy_coef
+        self.value_coef = value_coef
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.n_steps = n_steps
 
-        dim_actions = 4
+    def compute_advantages(self, rewards, dones, values, next_value):
+        advantages = []
+        advantage = 0
+        for i in reversed(range(len(rewards))):
+            td_error = rewards[i] + self.gamma * (1 - dones[i]) * next_value - values[i]
+            advantage = td_error + self.gamma * (1 - dones[i]) * advantage
+            advantages.insert(0, advantage)
+            next_value = values[i]
+        return advantages
+    
+    # Fonction pour calculer les retours (returns)
+    # def compute_returns(rewards, masks, next_value, gamma=GAMMA):
+    #     R = next_value
+    #     returns = []
+    #     for step in reversed(range(len(rewards))):
+    #         R = rewards[step] + gamma * masks[step] * R
+    #         returns.insert(0, R)
+    #     return torch.tensor(returns, dtype=torch.float32, device=device).unsqueeze(1)
 
-        self.actor = actor_model
-        self.critic = critic_model
+    def update_model(self, trajectory):
+        states, actions, rewards, dones, log_probs, values = zip(*trajectory)
+        states = torch.tensor(np.array(states), dtype=torch.float32).to(self.device)
+        actions = torch.tensor(actions, dtype=torch.int64).to(self.device)
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        dones = torch.tensor(dones, dtype=torch.float32).to(self.device)
+        log_probs = torch.tensor(log_probs, dtype=torch.float32).to(self.device)
+        values = torch.tensor(values, dtype=torch.float32).to(self.device)
 
-        self.cov_var = torch.full(size=(dim_actions,), fill_value=0.5)
-        self.cov_mat = torch.diag(self.cov_var)
+        with torch.no_grad():
+            next_value = self.model(states[-1].unsqueeze(0))[1].item()
+            advantages = self.compute_advantages(rewards, dones, values, next_value)
+            advantages = torch.tensor(advantages, dtype=torch.float32).to(self.device)
+            returns = advantages + values
 
-        self.init_hyperparameters()
+        for _ in range(self.epochs):
+            for idx in range(0, len(states), self.batch_size):
+                b_states = states[idx:idx + self.batch_size]
+                b_actions = actions[idx:idx + self.batch_size]
+                b_log_probs = log_probs[idx:idx + self.batch_size]
+                b_advantages = advantages[idx:idx + self.batch_size]
+                b_returns = returns[idx:idx + self.batch_size]
 
+                logits, value = self.model(b_states)
+                dist = torch.distributions.Categorical(logits=logits)
+                new_log_probs = dist.log_prob(b_actions)
+                entropy = dist.entropy().mean()
 
-        self.actor_optim = Adam(self.actor.parameters(), lr=self.lr)
-        self.critic_optim = Adam(self.critic.parameters(), lr=self.lr)
+                ratio = (new_log_probs - b_log_probs).exp()
+                surr1 = ratio * b_advantages
+                surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * b_advantages
+                policy_loss = -torch.min(surr1, surr2).mean()
+                value_loss = (b_returns - value).pow(2).mean()
+                loss = policy_loss - self.value_coef * value_loss - self.entropy_coef * entropy
+                #loss = policy_loss - value_loss 
 
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
-    def init_hyperparameters(self):
-        self.timesteps_per_batch = 4800
-        self.max_timesteps_per_episode = 2000
-        self.n_updates_per_iteration = 5
-        self.clip = 0.2
-        self.lr = 0.005
-        self.gamma = 0.99
+                # logits, values = self.model(b_states)
+                # dist = torch.distributions.Categorical(logits=logits)
+                # new_log_probs = dist.log_prob(b_actions)
+                # ratio = (new_log_probs - b_log_probs).exp()
 
-    def rollout(self):
-        # Batch data
-        batch_obs = [[] for _ in range(self.env.nb_agents)]     # batch observations
-        batch_acts = [[] for _ in range(self.env.nb_agents)]            # batch actions
-        batch_log_probs = [[] for _ in range(self.env.nb_agents)]       # log probs of each action
-        batch_rews = [[] for _ in range(self.env.nb_agents)]            # batch rewards
-        batch_rtgs = [[] for _ in range(self.env.nb_agents)]            # batch rewards-to-go
-        batch_lens = [[] for _ in range(self.env.nb_agents)]            # episodic lengths in batch
+                # surr1 = ratio * b_advantages
+                # surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * b_advantages
+                # policy_loss = -torch.min(surr1, surr2).mean()
+                # value_loss = nn.functional.mse_loss(values, b_returns)
 
-        # Number of timesteps ran in this batch
-        t = 0
-        while t < self.timesteps_per_batch:
-            # Rewards this episode
-            ep_rews = [[] for _ in range(self.env.nb_agents)]
+                # self.optimizer.zero_grad()
+                # (policy_loss + value_loss).backward()
+                # self.optimizer.step()
 
-            observations, infos = self.env.reset()
-            done = False
+    def collect_trajectories(self, render=False):
+        '''
+        Collect trajectories for each agent
+        '''
+        states, actions, rewards, dones, log_probs, values = [], [], [], [], [], []
+        for _ in range(self.env.nb_agents):
+            states.append([])
+            actions.append([])
+            rewards.append([])
+            dones.append([])
+            log_probs.append([])
+            values.append([])
 
-            for ep_t in range(self.max_timesteps_per_episode):
-                # render the environment
-                if True:
-                    img = self.env.render(mode='rgb_array')
-                    cv2.imshow('Pacman', img)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+        # Reset the environment 
+        observations, _ = self.env.reset()
+        done = False
 
-                # Increment timesteps ran this batch
-                t += 1
+        while len(rewards[0]) < self.n_steps:
 
-                # Calculate action and log prob for each agent
-                actions = [[] for _ in range(self.env.nb_agents)]
-                log_probs = [[] for _ in range(self.env.nb_agents)]
-                actions_to_play = []
-
-                for i, obs in enumerate(observations):
-                    batch_obs[i].append(obs)
-                    action, log_prob = self.get_action(obs)
-                    actions[i].append(action)
-                    log_probs[i].append(log_prob)
-
-                    # Add the max action index to the list of actions to play
-                    actions_to_play.append(np.argmax(action))
-
-                # Step environment
-                next_observations, rewards, done, truncated, infos = self.env.step(actions_to_play)
-
-                # Collect rewards
-                for i in range(self.env.nb_agents):
-                    ep_rews[i].append(rewards)
-                    batch_acts[i].append(actions)
-                    batch_log_probs[i].append(log_probs)
-
-                if done:
+            if render :
+                img = self.env.render(mode='rgb_array')
+                cv2.imshow('Pacman', img)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
 
-                # Update observations for next timestep
-                observations = next_observations
+            actions_to_play = []
 
-            print(f"Episode done. Timesteps run: {ep_t + 1}, Episode reward: {np.sum(ep_rews[0])}")
+            # For each agent, get the action to play
+            for agent_index, observation in enumerate(observations):
+                    state_tensor = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    logits, value = self.model(state_tensor)
+                    dist = torch.distributions.Categorical(logits=logits)
+                    action = dist.sample()
+                    log_prob = dist.log_prob(action)
+                    actions_to_play.append(action.item())
 
-            for i in range(self.env.nb_agents):
-                # Collect episodic length and rewards
-                batch_lens[i].append(ep_t + 1)
-                batch_rews[i].append(ep_rews[i])
+                    states[agent_index].append(observation)
+                    actions[agent_index].append(action.item())
+                    log_probs[agent_index].append(log_prob.item())
+                    values[agent_index].append(value.item())
 
-        batch_rtgs = [[] for _ in range(self.env.nb_agents)]
-        for i in range(self.env.nb_agents):
-            # Calculate reward-to-go
-            batch_rtgs[i] = self.compute_rtgs(batch_rews[i])
+            # Step the environment
+            observations, rewards_earned, done, truncated, infos = self.env.step(actions_to_play)
 
-        # Return the batch data
-        return batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens
+            for agent_index, reward in enumerate(rewards_earned):
+                rewards[agent_index].append(reward)
+                dones[agent_index].append(done)
+        
 
-    def compute_rtgs(self, batch_rews):
-        # The rewards-to-go (rtg) per episode per batch to return.
-        # The shape will be (num timesteps per episode)
-        batch_rtgs = []
-        # Iterate through each episode backwards to maintain same order
-        # in batch_rtgs
-        for ep_rews in reversed(batch_rews):
-            discounted_reward = 0 # The discounted reward so far
-            for rew in reversed(ep_rews):
-                discounted_reward = rew + discounted_reward * self.gamma
-                batch_rtgs.insert(0, discounted_reward)
-        # Convert the rewards-to-go into a tensor
-        batch_rtgs = np.array(batch_rtgs)
-        batch_rtgs = torch.tensor(batch_rtgs, dtype=torch.float).squeeze()
-        return batch_rtgs
+            if done or truncated:
+                observations, _ = self.env.reset()
+        
+        rewards_n_steps = [np.sum(rewards[agent_index]) for agent_index in range(self.env.nb_agents)]
 
-    def get_action(self, obs):
-        # Query the actor network for a mean action.
-        # Same thing as calling self.actor.forward(obs)
+        # Zip the trajectories and return them
+        trajectories = []
+        for agent_index in range(self.env.nb_agents):
+            trajectories.append(
+                zip(states[agent_index], actions[agent_index], rewards[agent_index], dones[agent_index], log_probs[agent_index], values[agent_index]))
 
-        # Convert the observation to a tensor
-        obs = torch.tensor(obs, dtype=torch.float)
-        mean = self.actor(obs.unsqueeze(0))
+        return trajectories, rewards_n_steps
+    
+    def train(self, num_iterations):
 
-        # Create our Multivariate Normal Distribution
-        dist = MultivariateNormal(mean, self.cov_mat)
+        mean_rewards_buffer = deque(maxlen=100)
+        for episode in range(num_iterations):
+            render = False
+            if episode % 100 == 0:
+                render = True
 
-        # Sample an action from the distribution and get its log prob
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
+            # Collect trajectories
+            trajectories, rewards = self.collect_trajectories(render=render)
 
-        # Return the sampled action and the log prob of that action
-        # Note that I'm calling detach() since the action and log_prob
-        # are tensors with computation graphs, so I want to get rid
-        # of the graph and just convert the action to numpy array.
-        # log prob as tensor is fine. Our computation graph will
-        # start later down the line.
-        return action.detach().numpy(), log_prob.detach()
+            # Update the model
+            for trajectory in trajectories:
+                self.update_model(trajectory)
 
+            mean_rewards_buffer.append(np.mean(rewards))
+                
+            print(f"Episode {episode} done with rewards: {np.mean(rewards)} mean rewards: {np.mean(mean_rewards_buffer)}")
 
-    def evaluate(self, batch_obs, batch_acts):
-        # Query critic network for a value V for each obs in batch_obs.
-        # convert the observations to tensors
-        V = self.critic(batch_obs).squeeze()
+        self.save_model()
 
-        # Calculate the log probabilities of batch actions using most
-        # recent actor network.
-        # This segment of code is similar to that in get_action()
-        mean = self.actor(batch_obs)
-        dist = MultivariateNormal(mean, self.cov_mat)
-        log_probs = dist.log_prob(batch_acts)
-        # Return predicted values V and log probs log_probs
-        return V, log_probs
-
-    def train(self, total_timesteps=1000000):
-        timesteps_done = 0
-
-        while timesteps_done < total_timesteps:
-            print(f"Total timesteps done: {timesteps_done}")
-            print("Collecting rollouts...")
-            batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()
-            print("Rollouts collected. Updating parameters...")
-            # Here we have the observations, actions for ALL agents. We will only use the actions of the first agent to train the actor and critic (for now)
-            # That is not optimal (e.g. we lose half of the training when n_agents = 2) and should be changed later on
-            batch_obs = np.array(batch_obs[0])
-            batch_acts = np.array(batch_acts[0])
-            batch_log_probs = np.array(batch_log_probs[0])
-            batch_lens = np.array(batch_lens[0])
-            batch_rtgs = batch_rtgs[0]
-
-            # Reshape data as tensors in the shape specified before returning
-            batch_obs = torch.tensor(batch_obs, dtype=torch.float)
-            batch_acts = torch.tensor(batch_acts, dtype=torch.float)
-            batch_log_probs = torch.tensor(batch_log_probs, dtype=torch.float)
-
-            # Calculate V_{phi, k}
-            V, _ = self.evaluate(batch_obs, batch_acts)
-
-            # Calculate advantage
-            A_k = batch_rtgs - V.detach()
-
-            # Normalize advantages
-            A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
-
-            for i in range(self.n_updates_per_iteration):
-                print(f"Updating actor and critic networks...{i}/{self.n_updates_per_iteration}")
-                # Calculate pi_theta(a_t | s_t)
-                _, curr_log_probs = self.evaluate(batch_obs, batch_acts)
-
-                # Calculate ratios
-                ratios = torch.exp(curr_log_probs - batch_log_probs)
-
-                # Calculate surrogate losses
-                surr1 = ratios * A_k
-                surr2 = torch.clamp(ratios, 1 - self.clip, 1 + self.clip) * A_k
-
-                # Calculate actor and critic losses
-                actor_loss = (-torch.min(surr1, surr2)).mean()
-
-                # Calculate gradients and perform backward propagation for actor
-                # network
-                self.actor_optim.zero_grad()
-                actor_loss.backward(retain_graph=True)
-                self.actor_optim.step()
-
-                # Calculate V_phi and pi_theta(a_t | s_t)
-                V, curr_log_probs = self.evaluate(batch_obs, batch_acts)
-
-                critic_loss = nn.MSELoss()(V, batch_rtgs)
-                # Calculate gradients and perform backward propagation for critic network
-                self.critic_optim.zero_grad()
-                critic_loss.backward()
-                self.critic_optim.step()
-
-            timesteps_done += np.sum(batch_lens)
+    def save_model(self):
+        torch.save(self.model.state_dict(), "model.pth")
