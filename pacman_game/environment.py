@@ -16,7 +16,7 @@ REWARDS = {
     "RW_NO_MOVE": 0,
     "RW_DYING_TO_GHOST": -500,
     "RW_EATING_GHOST": 50,
-    "RW_WINNING": 10000
+    "RW_WINNING": 100000
 }
 
 ACTION_MAP = {
@@ -64,6 +64,7 @@ class PacmanEnv(gym.Env):
         self.nb_pacgum_start = np.sum(self.map.type_map == GUM)
         self.nb_pacgum = self.nb_pacgum_start
 
+        print(self.nb_pacgum_start)
 
         # ---------------------------------------------------------------------
         # Define the action space (up, down, left, right)
