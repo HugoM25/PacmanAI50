@@ -7,13 +7,13 @@ from pacman_game.map import *
 from pacman_game.pacman import Pacman
 from pacman_game.ghosts import *
 
-MAX_STEPS = 5000
+MAX_STEPS = 500
 
 REWARDS = {
     "RW_GUM": 10,
     "RW_SUPER_GUM": 10,
-    "RW_EMPTY": 0,
-    "RW_NO_MOVE": 0,
+    "RW_EMPTY": -1,
+    "RW_NO_MOVE": -1,
     "RW_DYING_TO_GHOST": -500,
     "RW_EATING_GHOST": 50,
     "RW_WINNING": 100000
@@ -27,9 +27,27 @@ ACTION_MAP = {
 }
 
 class PacmanEnv(gym.Env):
-    def __init__(self, level_folder_path:str, flatten_observation:bool = False):
+    def __init__(self, levels_paths):
         super().__init__()
 
+        # Check if level folder path is a list or a string
+        if not isinstance(levels_paths, list):
+            self.levels_paths = [levels_paths]
+        else :
+            self.levels_paths = levels_paths
+
+        self.load_level(self.levels_paths[0])
+
+
+        # Define the action space (up, down, left, right)
+        self.action_space = spaces.MultiDiscrete(4)
+        self.possible_actions = 4
+
+        # Define the observation space
+        # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
+        self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
+
+    def load_level(self, level_folder_path:str):
         # Load the map
         self.map = Map(level_folder_path)
 
@@ -64,20 +82,6 @@ class PacmanEnv(gym.Env):
         self.nb_pacgum_start = np.sum(self.map.type_map == GUM)
         self.nb_pacgum = self.nb_pacgum_start
 
-        print(self.nb_pacgum_start)
-
-        # ---------------------------------------------------------------------
-        # Define the action space (up, down, left, right)
-        self.action_space = spaces.MultiDiscrete(4)
-        self.possible_actions = 4
-
-        # Define the observation space
-        # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
-        self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
-
-        self.flatten_observation = flatten_observation
-
-
 
     def step(self, actions):
 
@@ -110,9 +114,8 @@ class PacmanEnv(gym.Env):
 
             # Get the type of the candidate cell
             candidate_cell_type = self.map.type_map[tuple(candidate_position)]
-
             # Handle action/rewards based on the candidate cell type
-            if candidate_cell_type in [WALL, PACMAN_RIVAL, GHOST_DOOR]:
+            if candidate_cell_type in [WALL, GHOST_DOOR]:
                 rewards[agent_index] = REWARDS["RW_NO_MOVE"]
                 continue
 
@@ -152,8 +155,18 @@ class PacmanEnv(gym.Env):
                         # Reward the agent
                         rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
+            # Check for collision with other pacman (here pacman collides with pacman and cannot pass through)
+            no_obstacles = True
+            if self.nb_agents > 1:
+                for index, other_agent in enumerate(self.agents):
+                    if index != agent_index and other_agent.alive and np.all(other_agent.position == candidate_position):
+                        # Don't move
+                        no_obstacles = False
+                        rewards[agent_index] = REWARDS["RW_NO_MOVE"]
+
             # Move the agent
-            agent.position = candidate_position
+            if no_obstacles:
+                agent.position = candidate_position
 
 
         for ghost in self.ghosts:
@@ -168,7 +181,6 @@ class PacmanEnv(gym.Env):
 
             # Check if the candidate position is valid
             candidate_ghost_position = (candidate_ghost_position + self.map.type_map.shape) % self.map.type_map.shape
-
             # Check if the type of the cell
             cell_type = self.map.type_map[tuple(candidate_ghost_position)]
 
@@ -176,6 +188,7 @@ class PacmanEnv(gym.Env):
             if cell_type == WALL:
                 continue
 
+            ghost_died = False
             # Check for ghost collision with pacman (here the ghost collides with pacman)
             for agent in self.agents:
                 # Check if the ghost is colliding with pacman
@@ -186,6 +199,7 @@ class PacmanEnv(gym.Env):
                         ghost.reset()
                         # Reward the pacman agent
                         rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
+                        ghost_died = True
                     else:
                         # Kill the pacman
                         agent.alive = False
@@ -194,7 +208,8 @@ class PacmanEnv(gym.Env):
                         rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
 
             # Move the ghost
-            ghost.position = candidate_ghost_position
+            if not ghost_died:
+                ghost.position = candidate_ghost_position
 
         # Increase the step count of the episode
         self.current_step += 1
@@ -250,7 +265,7 @@ class PacmanEnv(gym.Env):
         for ghost in self.ghosts:
             map_copy[tuple(ghost.position)] = ghost.ghost_type
 
-        return map_copy.flatten() if self.flatten_observation else map_copy
+        return map_copy
 
 
     def _get_observations(self):
@@ -267,6 +282,11 @@ class PacmanEnv(gym.Env):
 
         self.current_step = 0
         self.max_steps = MAX_STEPS
+
+        # If the level folder path is a list then choose a random level
+        if len(self.levels_paths) > 1:
+            level_index = np.random.randint(0, len(self.levels_paths))
+            self.load_level(self.levels_paths[level_index])
 
         # Reset the map
         self.map.reset()

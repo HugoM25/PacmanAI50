@@ -4,6 +4,7 @@ import torch.optim as optim
 import numpy as np
 import time
 import cv2
+import os
 
 from collections import deque
 
@@ -24,24 +25,33 @@ class PPOTrainer(Trainer):
         self.batch_size = batch_size
         self.n_steps = n_steps
 
-    def compute_advantages(self, rewards, dones, values, next_value):
+    def compute_advantages(self, rewards, dones, values, next_value, lambda_=0.95):
+        # Convert rewards to a tensor for normalization
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+
+        # Normalize rewards
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+
+        # Compute advantages
         advantages = []
         advantage = 0
         for i in reversed(range(len(rewards))):
             td_error = rewards[i] + self.gamma * (1 - dones[i]) * next_value - values[i]
-            advantage = td_error + self.gamma * (1 - dones[i]) * advantage
-            advantages.insert(0, advantage)
+            advantage = td_error + self.gamma * lambda_ * (1 - dones[i]) * advantage
+            advantages.insert(0, advantage + values[i])
             next_value = values[i]
+
         return advantages
-    
-    # Fonction pour calculer les retours (returns)
-    # def compute_returns(rewards, masks, next_value, gamma=GAMMA):
-    #     R = next_value
-    #     returns = []
-    #     for step in reversed(range(len(rewards))):
-    #         R = rewards[step] + gamma * masks[step] * R
-    #         returns.insert(0, R)
-    #     return torch.tensor(returns, dtype=torch.float32, device=device).unsqueeze(1)
+
+    def compute_gae(self, rewards, values, next_value, dones, gamma=0.99, lambda_=0.95):
+        gae = 0
+        returns = []
+        for step in reversed(range(len(rewards))):
+            delta = rewards[step] + gamma * next_value * (1 - dones[step]) - values[step]
+            gae = delta + gamma * lambda_ * (1 - dones[step]) * gae
+            returns.insert(0, gae + values[step])
+            next_value = values[step]
+        return returns
 
     def update_model(self, trajectory):
         states, actions, rewards, dones, log_probs, values = zip(*trajectory)
@@ -71,31 +81,21 @@ class PPOTrainer(Trainer):
                 new_log_probs = dist.log_prob(b_actions)
                 entropy = dist.entropy().mean()
 
+                if entropy < 0.0001:
+                    print("Entropy is low, the model is not exploring enough")
+
                 ratio = (new_log_probs - b_log_probs).exp()
                 surr1 = ratio * b_advantages
                 surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * b_advantages
                 policy_loss = -torch.min(surr1, surr2).mean()
                 value_loss = (b_returns - value).pow(2).mean()
                 loss = policy_loss - self.value_coef * value_loss - self.entropy_coef * entropy
-                #loss = policy_loss - value_loss 
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
-                # logits, values = self.model(b_states)
-                # dist = torch.distributions.Categorical(logits=logits)
-                # new_log_probs = dist.log_prob(b_actions)
-                # ratio = (new_log_probs - b_log_probs).exp()
 
-                # surr1 = ratio * b_advantages
-                # surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * b_advantages
-                # policy_loss = -torch.min(surr1, surr2).mean()
-                # value_loss = nn.functional.mse_loss(values, b_returns)
-
-                # self.optimizer.zero_grad()
-                # (policy_loss + value_loss).backward()
-                # self.optimizer.step()
 
     def collect_trajectories(self, render=False):
         '''
@@ -110,7 +110,7 @@ class PPOTrainer(Trainer):
             log_probs.append([])
             values.append([])
 
-        # Reset the environment 
+        # Reset the environment
         observations, _ = self.env.reset()
         done = False
 
@@ -144,11 +144,11 @@ class PPOTrainer(Trainer):
             for agent_index, reward in enumerate(rewards_earned):
                 rewards[agent_index].append(reward)
                 dones[agent_index].append(done)
-        
+
 
             if done or truncated:
                 observations, _ = self.env.reset()
-        
+
         rewards_n_steps = [np.sum(rewards[agent_index]) for agent_index in range(self.env.nb_agents)]
 
         # Zip the trajectories and return them
@@ -158,7 +158,7 @@ class PPOTrainer(Trainer):
                 zip(states[agent_index], actions[agent_index], rewards[agent_index], dones[agent_index], log_probs[agent_index], values[agent_index]))
 
         return trajectories, rewards_n_steps
-    
+
     def train(self, num_iterations):
 
         mean_rewards_buffer = deque(maxlen=100)
@@ -175,10 +175,16 @@ class PPOTrainer(Trainer):
                 self.update_model(trajectory)
 
             mean_rewards_buffer.append(np.mean(rewards))
-                
+
             print(f"Episode {episode} done with rewards: {np.mean(rewards)} mean rewards: {np.mean(mean_rewards_buffer)}")
 
         self.save_model()
 
     def save_model(self):
         torch.save(self.model.state_dict(), "model.pth")
+
+
+    def load_model(self, model_path):
+        # Load model weights from the specified path
+        self.model.load_state_dict(torch.load(model_path))
+
