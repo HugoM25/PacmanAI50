@@ -31,7 +31,6 @@ class Ghost:
         self.position = self.start_position
         self.is_free = True
 
-
 class Blinky(Ghost):
     def __init__(self, position: tuple[int, int]):
         super().__init__(position=position)
