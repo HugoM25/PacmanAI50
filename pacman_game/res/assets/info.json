@@ -2,7 +2,7 @@
     "tileset":{
         "name": "tileset_pacman_1",
         "tile_size": 8,
-        "tile_count": 60,
+        "tile_count": 62,
         "tileset_path": "tileset_pacman_1.png",
         "tiles" :[
             {
@@ -304,6 +304,16 @@
                 "name": "path",
                 "id": 59,
                 "type": "0"
+            },
+            {
+                "name": "key",
+                "id": 60,
+                "type": "12"
+            },
+            {
+                "name": "door",
+                "id": 61,
+                "type": "13"
             }
         ]
     }

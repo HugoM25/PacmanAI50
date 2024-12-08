@@ -24,6 +24,8 @@ class Pacman() :
 
         self.last_action = -1
 
+        self.has_key = False
+
     def reset(self) :
         self.position = self.start_pos
         self.score = 0
@@ -32,6 +34,7 @@ class Pacman() :
         self.pacgum_eaten = 0
         self.superpower_step_left = 0
         self.last_action = -1
+        self.has_key = False
 
 
 

@@ -17,7 +17,8 @@ REWARDS = {
     "RW_DYING_TO_GHOST": -500,
     "RW_EATING_GHOST": 50,
     "RW_WINNING": 1000000,
-    "RW_TURNING_BACK": -10
+    "RW_TURNING_BACK": -10,
+    "RW_KEY": 10
 }
 
 ACTION_MAP = {
@@ -56,9 +57,9 @@ class PacmanEnv(gym.Env):
         # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
         self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
 
-    def load_level(self, level_folder_path:str):
+    def load_level(self, level_csv_path:str):
         # Load the map
-        self.map = Map(level_folder_path)
+        self.map = Map(level_csv_path)
 
         # Parse the number of players and the initial positions ---------------
         self.agents: Pacman = []
@@ -121,7 +122,7 @@ class PacmanEnv(gym.Env):
             # Check if the agent is turning back
             if agent.last_action != -1 and action == OPPOSITE_ACTION[agent.last_action]:
                 rewards[agent_index] += REWARDS["RW_TURNING_BACK"]
-            
+
             # Update the last direction
             agent.last_action = action
 
@@ -134,6 +135,14 @@ class PacmanEnv(gym.Env):
             if candidate_cell_type in [WALL, GHOST_DOOR]:
                 rewards[agent_index] += REWARDS["RW_NO_MOVE"]
                 continue
+
+            elif candidate_cell_type == DOOR :
+
+                if agent.has_key:
+                    rewards[agent_index] += REWARDS["RW_EMPTY"]
+                else:
+                    rewards[agent_index] += REWARDS["RW_NO_MOVE"]
+                    continue
 
             elif candidate_cell_type == GUM:
                 # Pick it up
@@ -150,6 +159,19 @@ class PacmanEnv(gym.Env):
                 agent.superpower_step_left = 60
                 # Reward the agent
                 rewards[agent_index] += REWARDS["RW_SUPER_GUM"]
+
+            elif candidate_cell_type == FRUIT:
+                # Pick it up
+                self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                # Reward the agent
+                rewards[agent_index] += REWARDS["RW_GUM"]
+
+            elif candidate_cell_type == KEY:
+                # Pick it up
+                self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                agent.has_key = True
+                # Reward the agent
+                rewards[agent_index] += REWARDS["RW_KEY"]
 
             elif candidate_cell_type == EMPTY:
                 rewards[agent_index] += REWARDS["RW_EMPTY"]
@@ -293,7 +315,7 @@ class PacmanEnv(gym.Env):
             # Append the matrix of the map to the observation
             observations[i].append(observation)
 
-            # Append additional information to the observation  
+            # Append additional information to the observation
 
             # Get the score of the other agents, there is either 1 or 2 agents
             score_other_agent = 0
