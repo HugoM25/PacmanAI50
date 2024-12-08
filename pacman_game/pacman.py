@@ -22,6 +22,8 @@ class Pacman() :
 
         self.superpower_step_left = 0
 
+        self.last_direction = -1
+
     def reset(self) :
         self.position = self.start_pos
         self.score = 0

@@ -7,16 +7,17 @@ from pacman_game.map import *
 from pacman_game.pacman import Pacman
 from pacman_game.ghosts import *
 
-MAX_STEPS = 500
+MAX_STEPS = 1500
 
 REWARDS = {
     "RW_GUM": 10,
-    "RW_SUPER_GUM": 10,
-    "RW_EMPTY": -1,
-    "RW_NO_MOVE": -1,
+    "RW_SUPER_GUM": 20,
+    "RW_EMPTY": -5,
+    "RW_NO_MOVE": -10,
     "RW_DYING_TO_GHOST": -500,
     "RW_EATING_GHOST": 50,
-    "RW_WINNING": 100000
+    "RW_WINNING": 1000000,
+    "RW_TURNING_BACK": -10
 }
 
 ACTION_MAP = {
@@ -25,6 +26,14 @@ ACTION_MAP = {
     2: np.array([0, -1]),  # Left
     3: np.array([0, 1]),   # Right
 }
+
+OPPOSITE_ACTION = {
+    0: 1,
+    1: 0,
+    2: 3,
+    3: 2
+}
+
 
 class PacmanEnv(gym.Env):
     def __init__(self, levels_paths):
@@ -109,6 +118,13 @@ class PacmanEnv(gym.Env):
             # Apply the action
             candidate_position = agent.position + ACTION_MAP[action]
 
+            # Check if the agent is turning back
+            if action == OPPOSITE_ACTION[agent.last_direction]:
+                rewards[agent_index] += REWARDS["RW_TURNING_BACK"]
+            
+            # Update the last direction
+            agent.last_direction = action
+
             # Restrain the candidate position to the map size (portal effect)
             candidate_position = (candidate_position + self.map.type_map.shape) % self.map.type_map.shape
 
@@ -116,7 +132,7 @@ class PacmanEnv(gym.Env):
             candidate_cell_type = self.map.type_map[tuple(candidate_position)]
             # Handle action/rewards based on the candidate cell type
             if candidate_cell_type in [WALL, GHOST_DOOR]:
-                rewards[agent_index] = REWARDS["RW_NO_MOVE"]
+                rewards[agent_index] += REWARDS["RW_NO_MOVE"]
                 continue
 
             elif candidate_cell_type == GUM:
@@ -125,7 +141,7 @@ class PacmanEnv(gym.Env):
                 agent.pacgum_eaten += 1
                 self.nb_pacgum -= 1
                 # Reward the agent
-                rewards[agent_index] = REWARDS["RW_GUM"]
+                rewards[agent_index] += REWARDS["RW_GUM"]
 
             elif candidate_cell_type == SUPER_GUM:
                 # Pick it up
@@ -133,10 +149,10 @@ class PacmanEnv(gym.Env):
                 # Set the superpower step left
                 agent.superpower_step_left = 60
                 # Reward the agent
-                rewards[agent_index] = REWARDS["RW_SUPER_GUM"]
+                rewards[agent_index] += REWARDS["RW_SUPER_GUM"]
 
             elif candidate_cell_type == EMPTY:
-                rewards[agent_index] = REWARDS["RW_EMPTY"]
+                rewards[agent_index] += REWARDS["RW_EMPTY"]
 
             # Check for pacman collision with the ghosts (here pacman collides with ghost)
             for ghost in self.ghosts:
@@ -147,13 +163,13 @@ class PacmanEnv(gym.Env):
                         # Kill the ghost
                         ghost.reset()
                         # Reward the agent
-                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
+                        rewards[agent_index] += REWARDS["RW_EATING_GHOST"]
                     else:
                         # Kill the pacman
                         agent.alive = False
                         self.alive_agents -= 1
                         # Reward the agent
-                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
+                        rewards[agent_index] += REWARDS["RW_DYING_TO_GHOST"]
 
             # Check for collision with other pacman (here pacman collides with pacman and cannot pass through)
             no_obstacles = True
@@ -162,7 +178,7 @@ class PacmanEnv(gym.Env):
                     if index != agent_index and other_agent.alive and np.all(other_agent.position == candidate_position):
                         # Don't move
                         no_obstacles = False
-                        rewards[agent_index] = REWARDS["RW_NO_MOVE"]
+                        rewards[agent_index] += REWARDS["RW_NO_MOVE"]
 
             # Move the agent
             if no_obstacles:
@@ -198,14 +214,14 @@ class PacmanEnv(gym.Env):
                         # Kill the ghost
                         ghost.reset()
                         # Reward the pacman agent
-                        rewards[agent_index] = REWARDS["RW_EATING_GHOST"]
+                        rewards[agent_index] += REWARDS["RW_EATING_GHOST"]
                         ghost_died = True
                     else:
                         # Kill the pacman
                         agent.alive = False
                         self.alive_agents -= 1
                         # Reward the pacman agent
-                        rewards[agent_index] = REWARDS["RW_DYING_TO_GHOST"]
+                        rewards[agent_index] += REWARDS["RW_DYING_TO_GHOST"]
 
             # Move the ghost
             if not ghost_died:
@@ -236,7 +252,7 @@ class PacmanEnv(gym.Env):
         elif self.nb_pacgum == 0:
             # Give rewards based on steps left to the agents alive
             for agent in self.agents:
-                rewards[agent_index] = REWARDS["RW_WINNING"] / self.current_step
+                rewards[agent_index] += REWARDS["RW_WINNING"] / self.current_step
 
             done = True
 
