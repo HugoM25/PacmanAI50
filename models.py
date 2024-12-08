@@ -352,3 +352,61 @@ class ActorCriticED(nn.Module):
         logits = self.policy(shared_out)
         value = self.value(shared_out)
         return Categorical(logits=logits), value
+
+
+class PacmanModel(nn.Module):
+    def __init__(self, obs_shape, n_actions):
+        super(PacmanModel, self).__init__()
+
+        # Convolutional layers
+        self.conv_net = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=16, kernel_size=5, stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+        )
+
+        conv_out_size = self.get_conv_output_size((1, obs_shape[0], obs_shape[1]))
+        additional_info_size = 6
+
+        self.fc = nn.Sequential(
+            nn.Linear(conv_out_size + additional_info_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+        )
+
+        self.policy = nn.Linear(256, n_actions)
+        self.value = nn.Linear(256, 1)
+
+    def get_conv_output_size(self, shape):
+        '''
+        Get the output size of the convolutional layers by passing a dummy input and checking the output size
+        @param shape: tuple, shape of the input
+        '''
+        dummy_input = torch.zeros(1, *shape)
+        output = self.conv_net(dummy_input)
+        return int(torch.prod(torch.tensor(output.size())))
+
+
+    def forward(self, map_obs_t, add_info_t):
+
+        # x is of shape (1,31,28)
+        map_obs_t = map_obs_t.unsqueeze(1)
+        # Pass map through conv layers
+        map_obs_t = self.conv_net(map_obs_t)
+        
+        # Flatten the input
+        map_obs_t = map_obs_t.view(map_obs_t.size(0), -1)
+
+
+
+        # Concatenate the additional information
+        total_obs = torch.cat((map_obs_t, add_info_t), dim=1)
+
+        # Pass through fully connected layers
+        total_obs = self.fc(total_obs)
+
+        return self.policy(total_obs), self.value(total_obs)
