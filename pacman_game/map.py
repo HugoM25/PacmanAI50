@@ -19,17 +19,22 @@ PACMAN_RIVAL = 11
 
 class Map :
 
-    def __init__(self, level_folder_path=None):
+    def __init__(self, level_csv_path=None):
 
         # Load the level from a CSV file
-        self.tile_map = self.load_level_from_csv(level_folder_path + "level_data.csv")
+        self.tile_map = self.load_level_from_csv(level_csv_path)
+
+        # Get the res folder path from the level_csv_path
+        level_csv_path.split("/")
+        # remove last two elements
+        res_folder_path = "/".join(level_csv_path.split("/")[:-2]) + "/"
 
         # Load the json file to get the type of each cell
-        with open(level_folder_path + "info.json", "r") as f:
+        with open( res_folder_path + "assets/info.json", "r") as f:
             self.level_json = json.load(f)
 
         # Load the tileset image from the level folder
-        self.tileset = cv2.imread(level_folder_path + "tileset.png")
+        self.tileset = cv2.imread(res_folder_path + "assets/tileset.png")
         # Separate the tileset into individual tiles
         self.tiles = []
         self.tile_size = self.level_json["tileset"]['tile_size']
@@ -51,11 +56,11 @@ class Map :
         # Remove the pacman and the ghosts from the map
         for pacman_spawn in self.pacman_spawns:
             self.type_map[pacman_spawn[0], pacman_spawn[1]] = EMPTY
-            self.tile_map[pacman_spawn[0], pacman_spawn[1]] = 60
+            self.tile_map[pacman_spawn[0], pacman_spawn[1]] = 59
         for ghost_spawn in self.ghosts_spawns:
             if ghost_spawn is not None:
                 self.type_map[ghost_spawn[0], ghost_spawn[1]] = EMPTY
-                self.tile_map[ghost_spawn[0], ghost_spawn[1]] = 60
+                self.tile_map[ghost_spawn[0], ghost_spawn[1]] = 59
 
         # Save the initial maps
         self.initial_tile_map = self.tile_map.copy()

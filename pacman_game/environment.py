@@ -56,9 +56,9 @@ class PacmanEnv(gym.Env):
         # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
         self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
 
-    def load_level(self, level_folder_path:str):
+    def load_level(self, level_csv_path:str):
         # Load the map
-        self.map = Map(level_folder_path)
+        self.map = Map(level_csv_path)
 
         # Parse the number of players and the initial positions ---------------
         self.agents: Pacman = []
@@ -121,7 +121,7 @@ class PacmanEnv(gym.Env):
             # Check if the agent is turning back
             if agent.last_action != -1 and action == OPPOSITE_ACTION[agent.last_action]:
                 rewards[agent_index] += REWARDS["RW_TURNING_BACK"]
-            
+
             # Update the last direction
             agent.last_action = action
 
@@ -293,7 +293,7 @@ class PacmanEnv(gym.Env):
             # Append the matrix of the map to the observation
             observations[i].append(observation)
 
-            # Append additional information to the observation  
+            # Append additional information to the observation
 
             # Get the score of the other agents, there is either 1 or 2 agents
             score_other_agent = 0

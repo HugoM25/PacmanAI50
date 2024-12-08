@@ -53,8 +53,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize the environment
-    # level_list_to_use = ["pacman_game/res/level11/", "pacman_game/res/level12/", "pacman_game/res/level13/", "pacman_game/res/level14/"]
-    level_list_to_use = ["pacman_game/res/level0/", "pacman_game/res/level00/"]
+    level_list_to_use = ["pacman_game/res/levels/level_0.csv"]
     environment = PacmanEnv(levels_paths=level_list_to_use)
 
     # Initialize the trainer

@@ -304,6 +304,16 @@
                 "name": "path",
                 "id": 59,
                 "type": "0"
+            },
+            {
+                "name": "key",
+                "id": 60,
+                "type": "11"
+            },
+            {
+                "name": "door",
+                "id": 61,
+                "type": "12"
             }
         ]
     }
