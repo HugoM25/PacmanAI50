@@ -16,6 +16,8 @@ FRUIT = 8
 WALL = 9
 GHOST_DOOR = 10
 PACMAN_RIVAL = 11
+KEY = 12
+DOOR = 13
 
 class Map :
 
@@ -34,7 +36,7 @@ class Map :
             self.level_json = json.load(f)
 
         # Load the tileset image from the level folder
-        self.tileset = cv2.imread(res_folder_path + "assets/tileset.png")
+        self.tileset = cv2.imread(res_folder_path + "assets/tileset.png", cv2.IMREAD_UNCHANGED)
         # Separate the tileset into individual tiles
         self.tiles = []
         self.tile_size = self.level_json["tileset"]['tile_size']
@@ -68,11 +70,11 @@ class Map :
 
         # Render optimizations -----------------------------------------------
         # Create a "background" image for the map where no ghosts/pacman/gums are drawn
-        self.background = np.zeros((self.tile_map.shape[0] * self.tile_size, self.tile_map.shape[1] * self.tile_size, 3), dtype=np.uint8)
+        self.background = np.zeros((self.tile_map.shape[0] * self.tile_size, self.tile_map.shape[1] * self.tile_size, 4), dtype=np.uint8)
         for i in range(self.type_map.shape[0]):
             for j in range(self.type_map.shape[1]):
                 tile_t = self.type_map[i, j]
-                if tile_t not in [WALL,GHOST_DOOR,EMPTY] :
+                if tile_t not in [WALL,GHOST_DOOR,EMPTY,DOOR] :
                     continue
 
                 tile_i = self.tiles[self.tile_map[i, j]]
@@ -163,16 +165,39 @@ class Map :
                 # Add the super gum to the image
                 if tile_t == SUPER_GUM:
                     map_img[i*self.tile_size:(i+1)*self.tile_size, j*self.tile_size:(j+1)*self.tile_size] = self.tiles[self.tile_map[i, j]]
+                # Add the fruit to the image
+                if tile_t == FRUIT:
+                    map_img[i*self.tile_size:(i+1)*self.tile_size, j*self.tile_size:(j+1)*self.tile_size] = self.tiles[self.tile_map[i, j]]
+                # Add the key to the image
+                if tile_t == KEY:
+                    map_img[i*self.tile_size:(i+1)*self.tile_size, j*self.tile_size:(j+1)*self.tile_size] = self.tiles[self.tile_map[i, j]]
 
-        # Add the pacman agents to the image
+        # Add the pacman agents to the image with transparency
+        pacman_tile = self.tiles[6][:, :, :3]
+        alpha_pacman = self.tiles[6][:, :, 3] / 255.0
         for pacman in pacman_agents:
-            if pacman.alive:
-                map_img[pacman.position[0]*self.tile_size:(pacman.position[0]+1)*self.tile_size, pacman.position[1]*self.tile_size:(pacman.position[1]+1)*self.tile_size] = self.tiles[6]
+            if not pacman.alive:
+                continue
 
-        # Add the ghost agents to the image
+            x, y = pacman.position
+            tile_region = map_img[x*self.tile_size:(x+1)*self.tile_size, y*self.tile_size:(y+1)*self.tile_size, :3]
+            for c in range(3):
+                tile_region[:, :, c] = (alpha_pacman * pacman_tile[:, :, c] +
+                            (1 - alpha_pacman) * tile_region[:, :, c])
+
+
+        # Add the ghost agents to the image with transparency
         for ghost in ghost_agents:
-            map_img[ghost.position[0]*self.tile_size:(ghost.position[0]+1)*self.tile_size, ghost.position[1]*self.tile_size:(ghost.position[1]+1)*self.tile_size] = self.tiles[ghost.ghost_type-1]
+            if not ghost.is_free:
+                continue
 
+            x, y = ghost.position
+            tile_region = map_img[x*self.tile_size:(x+1)*self.tile_size, y*self.tile_size:(y+1)*self.tile_size, :3]
+            ghost_tile = self.tiles[ghost.ghost_type-1][:, :, :3]
+            alpha_ghost = self.tiles[ghost.ghost_type-1][:, :, 3] / 255.0
+            for c in range(3):
+                tile_region[:, :, c] = (alpha_ghost * ghost_tile[:, :, c] +
+                            (1 - alpha_ghost) * tile_region[:, :, c])
 
         # Scale the image up
         map_img = cv2.resize(map_img, (map_img.shape[1]*2, map_img.shape[0]*2), interpolation=cv2.INTER_NEAREST)

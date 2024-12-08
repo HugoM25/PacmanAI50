@@ -17,7 +17,8 @@ REWARDS = {
     "RW_DYING_TO_GHOST": -500,
     "RW_EATING_GHOST": 50,
     "RW_WINNING": 1000000,
-    "RW_TURNING_BACK": -10
+    "RW_TURNING_BACK": -10,
+    "RW_KEY": 10
 }
 
 ACTION_MAP = {
@@ -135,6 +136,14 @@ class PacmanEnv(gym.Env):
                 rewards[agent_index] += REWARDS["RW_NO_MOVE"]
                 continue
 
+            elif candidate_cell_type == DOOR :
+
+                if agent.has_key:
+                    rewards[agent_index] += REWARDS["RW_EMPTY"]
+                else:
+                    rewards[agent_index] += REWARDS["RW_NO_MOVE"]
+                    continue
+
             elif candidate_cell_type == GUM:
                 # Pick it up
                 self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
@@ -150,6 +159,19 @@ class PacmanEnv(gym.Env):
                 agent.superpower_step_left = 60
                 # Reward the agent
                 rewards[agent_index] += REWARDS["RW_SUPER_GUM"]
+
+            elif candidate_cell_type == FRUIT:
+                # Pick it up
+                self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                # Reward the agent
+                rewards[agent_index] += REWARDS["RW_GUM"]
+
+            elif candidate_cell_type == KEY:
+                # Pick it up
+                self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
+                agent.has_key = True
+                # Reward the agent
+                rewards[agent_index] += REWARDS["RW_KEY"]
 
             elif candidate_cell_type == EMPTY:
                 rewards[agent_index] += REWARDS["RW_EMPTY"]

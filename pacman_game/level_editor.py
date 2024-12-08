@@ -45,7 +45,7 @@ class LevelEditor:
         self.font = pygame.font.Font(None, 24)
 
         # Load the tileset used to draw the grid
-        self.load_tileset_to_paint("tileset.png")
+        self.load_tileset_to_paint()
 
         # Create the buttons
         self.save_button = pygame.Rect(10, GRID_HEIGHT + 10, 80, 30)
@@ -66,15 +66,15 @@ class LevelEditor:
 
         self.running = True
 
-    def load_tileset_to_paint(self, tileset_path):
+    def load_tileset_to_paint(self):
         #Load the json file with the tileset
         self.tileset_data = None
-        with open(os.path.join("pacman_game/res", "tileset_pacman1.json"), "r") as f:
+        with open("pacman_game/res/assets/info.json", "r") as f:
             self.tileset_data = json.load(f)["tileset"]
         self.tile_size = self.tileset_data["tile_size"]
 
         # Load the tileset used to draw the grid
-        self.tileset = pygame.image.load(os.path.join("pacman_game/res", tileset_path)).convert_alpha()
+        self.tileset = pygame.image.load("pacman_game/res/assets/tileset.png").convert_alpha()
         self.tileset_columns = self.tileset.get_width() // self.tile_size
         self.tileset_rows = self.tileset.get_height() // self.tile_size
 
