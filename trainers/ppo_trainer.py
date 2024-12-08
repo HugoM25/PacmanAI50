@@ -121,61 +121,67 @@ class PPOTrainer(Trainer):
                 # Gradient clipping
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
                 self.optimizer.step()
-    
+
     def get_action_mask(self, map_state, info_state):
+        '''
+        Returns a mask for valid actions (True) and invalid actions (False)
+        map_state: [batch_size, height, width] tensor containing the map
+        info_state: [batch_size, ...] tensor containing agent info including position
+        '''
         batch_size = map_state.shape[0]
         height, width = map_state.shape[1:3]
         masks = torch.ones((batch_size, 4), dtype=torch.bool, device=self.device)
-        
-        # Get positions for all batch items
-        pos = info_state[:, 4:6].long()
+
+        # Get current positions
+        pos = info_state[:, 0:2].long()  # Get x,y positions
         batch_idx = torch.arange(batch_size, device=self.device)
-        
-        # Calculate wrapped positions for all directions
-        up_pos = (pos[:, 0] - 1) % height
-        down_pos = (pos[:, 0] + 1) % height
-        left_pos = (pos[:, 1] - 1) % width
-        right_pos = (pos[:, 1] + 1) % width
-        
-        # Check walls in wrapped positions
+
+        # Calculate wrapped positions
+        up_pos = torch.remainder(pos[:, 0] - 1, height)
+        down_pos = torch.remainder(pos[:, 0] + 1, height)
+        left_pos = torch.remainder(pos[:, 1] - 1, width)
+        right_pos = torch.remainder(pos[:, 1] + 1, width)
+
+        # Check walls (type 9 or 10) at target positions
+        # True = valid move, False = invalid move
         masks[:, 0] = ~(  # Up
             (map_state[batch_idx, up_pos, pos[:, 1]] == 9) |
             (map_state[batch_idx, up_pos, pos[:, 1]] == 10)
         )
-        
+
         masks[:, 1] = ~(  # Down
             (map_state[batch_idx, down_pos, pos[:, 1]] == 9) |
             (map_state[batch_idx, down_pos, pos[:, 1]] == 10)
         )
-        
+
         masks[:, 2] = ~(  # Left
             (map_state[batch_idx, pos[:, 0], left_pos] == 9) |
             (map_state[batch_idx, pos[:, 0], left_pos] == 10)
         )
-        
+
         masks[:, 3] = ~(  # Right
             (map_state[batch_idx, pos[:, 0], right_pos] == 9) |
             (map_state[batch_idx, pos[:, 0], right_pos] == 10)
         )
-        
+
         return masks
-    
-    def compute_masked_loss(self, action_masks, actions): 
+
+    def compute_masked_loss(self, action_masks, actions):
         '''
         Add penalty for selecting invalid actions
         '''
         invalid_actions = ~action_masks[torch.arange(len(actions)), actions]
         mask_loss = invalid_actions.float().mean() * self.mask_penalty
         return mask_loss
-    
+
 
     def render(self):
         img = self.env.render(mode='rgb_array')
         cv2.imshow('Pacman', img)
         # Simplified key check
-        return cv2.waitKey(1) != ord('q')          
-        
-    
+        return cv2.waitKey(1) != ord('q')
+
+
     def train(self, max_steps):
         mean_rewards_buffer = deque(maxlen=100)
         current_step = 0
@@ -195,9 +201,9 @@ class PPOTrainer(Trainer):
             episode_rewards = [0 for _ in range(self.env.nb_agents)]
             observations, _ = self.env.reset()
 
-            # Collect trajectories by playing the game 
+            # Collect trajectories by playing the game
             while len(rewards[0]) < self.n_steps and not done:
-                
+
                 current_step += 1
 
                 # Render the environment every X episodes
@@ -205,7 +211,7 @@ class PPOTrainer(Trainer):
                     self.render()
 
                 # self.render()
-                
+
                 actions_to_play = []
 
                 # For each agent, get the action to play
@@ -220,6 +226,7 @@ class PPOTrainer(Trainer):
                         if self.use_action_masks:
                             # Get the action mask
                             action_mask = self.get_action_mask(map_state_tensor, info_state_tensor)
+                            print(action_mask)
                             # Apply the mask by setting logits of invalid actions to -inf
                             masked_logits = logits.masked_fill(~action_mask, -np.inf)
                             dist = torch.distributions.Categorical(logits=masked_logits)
@@ -243,7 +250,7 @@ class PPOTrainer(Trainer):
                     dones[agent_index].append(done)
 
                     episode_rewards[agent_index] += reward
-            
+
                 if done or truncated:
                     observations, _ = self.env.reset()
                     episode_count += 1
@@ -254,13 +261,13 @@ class PPOTrainer(Trainer):
                 for agent_index in range(self.env.nb_agents):
                     trajectories.append(
                         zip(states[agent_index], actions[agent_index], rewards[agent_index], dones[agent_index], log_probs[agent_index], values[agent_index]))
-            
-            mean_rewards_buffer.append(np.mean(episode_rewards))    
 
-                    
+            mean_rewards_buffer.append(np.mean(episode_rewards))
+
+
             if episode_count % 1 == 0:
                 print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer)}, episode rewards: {episode_rewards[0]}")
-                    
+
             # Update the model
             for trajectory in trajectories:
                 self.update_model(trajectory)
