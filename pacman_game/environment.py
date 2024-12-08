@@ -119,11 +119,11 @@ class PacmanEnv(gym.Env):
             candidate_position = agent.position + ACTION_MAP[action]
 
             # Check if the agent is turning back
-            if action == OPPOSITE_ACTION[agent.last_direction]:
+            if agent.last_action != -1 and action == OPPOSITE_ACTION[agent.last_action]:
                 rewards[agent_index] += REWARDS["RW_TURNING_BACK"]
             
             # Update the last direction
-            agent.last_direction = action
+            agent.last_action = action
 
             # Restrain the candidate position to the map size (portal effect)
             candidate_position = (candidate_position + self.map.type_map.shape) % self.map.type_map.shape
@@ -286,10 +286,29 @@ class PacmanEnv(gym.Env):
 
     def _get_observations(self):
         # Get observations for all agents
-        observations = []
+        observations = [[] for _ in range(self.nb_agents)]
         for i in range(self.nb_agents) :
             observation = self._get_observation_for_agent(i)
-            observations.append(observation)
+
+            # Append the matrix of the map to the observation
+            observations[i].append(observation)
+
+            # Append additional information to the observation  
+
+            # Get the score of the other agents, there is either 1 or 2 agents
+            score_other_agent = 0
+
+            if self.nb_agents > 1:
+                score_other_agent = self.agents[1 - i].score
+
+            observations[i].append(
+                [int(self.agents[i].position[0]), int(self.agents[i].position[1]), # Position x, y of the agent
+                 int(self.agents[i].last_action), # Last action of the agent
+                 int(self.agents[i].superpower_step_left),  # Superpower step left
+                 int(score_other_agent), int(self.agents[i].score) # Score of the other agent and this agent
+                 ]
+            )
+
         return observations
 
     def reset(self, seed=None):

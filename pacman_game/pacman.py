@@ -22,7 +22,7 @@ class Pacman() :
 
         self.superpower_step_left = 0
 
-        self.last_direction = -1
+        self.last_action = -1
 
     def reset(self) :
         self.position = self.start_pos
@@ -31,6 +31,7 @@ class Pacman() :
         self.alive = True
         self.pacgum_eaten = 0
         self.superpower_step_left = 0
+        self.last_action = -1
 
 
 
