@@ -9,6 +9,7 @@ from collections import deque
 
 from trainers.trainer import Trainer
 
+from torch.utils.tensorboard import SummaryWriter
 
 class PPOTrainer(Trainer):
     def __init__(self, env, model, device, optimizer, clip_epsilon, gamma, entropy_coef, value_coef, epochs=4, batch_size=32, n_steps=2048, gae_lambda=0.95, use_action_masks=False, mask_penalty=1.0):
@@ -16,6 +17,8 @@ class PPOTrainer(Trainer):
         self.model = model.to(device)
         self.device = device
         self.optimizer = optimizer
+
+        # Hyerparameters
         self.clip_epsilon = clip_epsilon
         self.gamma = gamma
         self.entropy_coef = entropy_coef
@@ -26,6 +29,9 @@ class PPOTrainer(Trainer):
         self.gae_lambda = gae_lambda
         self.use_action_masks = use_action_masks
         self.mask_penalty = mask_penalty
+
+        # Monitor the training
+        self.writer = SummaryWriter()
 
     def compute_advantages(self, rewards, dones, values, next_value):
         advantages = []
@@ -119,8 +125,18 @@ class PPOTrainer(Trainer):
                 self.optimizer.zero_grad()
                 loss.backward()
                 # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
                 self.optimizer.step()
+
+
+                # Log metrics to tensorboard
+                self.writer.add_scalar('Loss/Total', loss.item(), global_step=self.writer.iteration)
+                self.writer.add_scalar('Loss/Policy', policy_loss.item(), global_step=self.writer.iteration)
+                self.writer.add_scalar('Loss/Value', value_loss.item(), global_step=self.writer.iteration)
+                self.writer.add_scalar('Loss/Entropy', entropy.item(), global_step=self.writer.iteration)
+
+                # Flush the writer to ensure logs are written to disk
+                self.writer.flush()
 
     def get_action_mask(self, map_state, info_state):
         '''
@@ -175,8 +191,9 @@ class PPOTrainer(Trainer):
         return mask_loss
 
 
-    def render(self):
-        img = self.env.render(mode='rgb_array')
+    def render(self, infos=None):
+
+        img = self.env.render(mode='rgb_array', infos=infos)
         cv2.imshow('Pacman', img)
         # Simplified key check
         return cv2.waitKey(1) != ord('q')
@@ -186,6 +203,7 @@ class PPOTrainer(Trainer):
         mean_rewards_buffer = deque(maxlen=100)
         current_step = 0
         episode_count = 0
+        self.writer.iteration = 0
 
         # Train for num_steps
         while current_step < max_steps:
@@ -201,16 +219,21 @@ class PPOTrainer(Trainer):
             episode_rewards = [0 for _ in range(self.env.nb_agents)]
             observations, _ = self.env.reset()
 
+            last_proba_actions = [[] for _ in range(self.env.nb_agents)]
+
             # Collect trajectories by playing the game
             while len(rewards[0]) < self.n_steps and not done:
 
                 current_step += 1
 
                 # Render the environment every X episodes
-                if episode_count % 50 == 0:
-                    self.render()
-
-                # self.render()
+                if episode_count % 1 == 0:
+                    disp_infos = {'episode': episode_count,
+                                  'step': len(rewards[0]),
+                                  'rewards': episode_rewards[0],
+                                  'probabilities_moves': last_proba_actions
+                                  }
+                    self.render(disp_infos)
 
                 actions_to_play = []
 
@@ -226,12 +249,13 @@ class PPOTrainer(Trainer):
                         if self.use_action_masks:
                             # Get the action mask
                             action_mask = self.get_action_mask(map_state_tensor, info_state_tensor)
-                            print(action_mask)
                             # Apply the mask by setting logits of invalid actions to -inf
                             masked_logits = logits.masked_fill(~action_mask, -np.inf)
                             dist = torch.distributions.Categorical(logits=masked_logits)
                         else:
                             dist = torch.distributions.Categorical(logits=logits)
+
+                        last_proba_actions[agent_index] = dist.probs.detach().cpu().numpy()
 
                         action = dist.sample()
                         log_prob = dist.log_prob(action)
@@ -268,6 +292,8 @@ class PPOTrainer(Trainer):
             if episode_count % 1 == 0:
                 print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer)}, episode rewards: {episode_rewards[0]}")
 
+
+
             # Update the model
             for trajectory in trajectories:
                 self.update_model(trajectory)
@@ -275,7 +301,12 @@ class PPOTrainer(Trainer):
             if current_step % 50000 == 0:
                 self.save_model()
 
+            self.writer.add_scalar('Rewards/episode_reward', episode_rewards[0], global_step=current_step)
+            self.writer.add_scalar('Rewards/mean_reward', np.mean(episode_rewards), global_step=current_step)
+
+            self.writer.iteration += 1
         self.save_model()
+        self.writer.close()
 
     def save_model(self):
         torch.save(self.model.state_dict(), "model.pth")

@@ -144,12 +144,12 @@ class Map :
         self.tile_map = self.initial_tile_map.copy()
         self.type_map = self.initial_type_map.copy()
 
-    def render(self, mode: str, pacman_agents, ghost_agents):
+    def render(self, mode: str, pacman_agents, ghost_agents, infos=None):
         if mode == "rgb_array":
-            return self._render_as_rgb_array(pacman_agents=pacman_agents, ghost_agents=ghost_agents)
+            return self._render_as_rgb_array(pacman_agents=pacman_agents, ghost_agents=ghost_agents, infos=infos)
 
 
-    def _render_as_rgb_array(self, pacman_agents, ghost_agents):
+    def _render_as_rgb_array(self, pacman_agents, ghost_agents, infos=None):
         '''
         Render the map as an RGB array.
         :return: The RGB array of the map as a numpy array
@@ -172,21 +172,7 @@ class Map :
                 if tile_t == KEY:
                     map_img[i*self.tile_size:(i+1)*self.tile_size, j*self.tile_size:(j+1)*self.tile_size] = self.tiles[self.tile_map[i, j]]
 
-        # Add the pacman agents to the image with transparency
-        pacman_tile = self.tiles[6][:, :, :3]
-        alpha_pacman = self.tiles[6][:, :, 3] / 255.0
-        for pacman in pacman_agents:
-            if not pacman.alive:
-                continue
-
-            x, y = pacman.position
-            tile_region = map_img[x*self.tile_size:(x+1)*self.tile_size, y*self.tile_size:(y+1)*self.tile_size, :3]
-            for c in range(3):
-                tile_region[:, :, c] = (alpha_pacman * pacman_tile[:, :, c] +
-                            (1 - alpha_pacman) * tile_region[:, :, c])
-
-
-        # Add the ghost agents to the image with transparency
+        # Add the ghosts to the image
         for ghost in ghost_agents:
             if not ghost.is_free:
                 continue
@@ -199,8 +185,65 @@ class Map :
                 tile_region[:, :, c] = (alpha_ghost * ghost_tile[:, :, c] +
                             (1 - alpha_ghost) * tile_region[:, :, c])
 
+        # Add the pacman agents to the image with transparency
+        pacman_tile = self.tiles[6][:, :, :]
+
+        for pacman in pacman_agents:
+            if not pacman.alive:
+                continue
+
+            # Rotate the pacman image according to the last action
+
+            # Base pacman is facing right
+            pacman_tile_rotated = pacman_tile
+
+            if pacman.last_action == 0:
+                # Rotate the pacman image to face up
+                pacman_tile_rotated = np.rot90(pacman_tile, 1)
+            elif pacman.last_action == 1:
+                # Mirror the pacman image to face down
+                pacman_tile_rotated = np.flipud(pacman_tile)
+            elif pacman.last_action == 2:
+                pacman_tile_rotated = np.fliplr(pacman_tile)
+
+
+            x, y = pacman.position
+
+            # Add the pacman to the image
+            map_img[x*self.tile_size:(x+1)*self.tile_size, y*self.tile_size:(y+1)*self.tile_size] = pacman_tile_rotated
+
+
+        # Add padding to the image
+        map_img = cv2.copyMakeBorder(map_img, 10, 10, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
+
         # Scale the image up
         map_img = cv2.resize(map_img, (map_img.shape[1]*2, map_img.shape[0]*2), interpolation=cv2.INTER_NEAREST)
+
+        # Add the score of the pacman agents to the image at the top left corner of the image
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        for i, pacman in enumerate(pacman_agents):
+            cv2.putText(map_img, f"J{i} score : {pacman.score}", (20, 20 + i*20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # Add the episode number to the image at the top right corner of the image
+        if infos['episode'] is not None:
+            cv2.putText(map_img, f"Episode : {infos['episode']}", (map_img.shape[1] - 150, 20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+        # Add the step number to the image at the top right corner of the image
+        if infos['step'] is not None:
+            cv2.putText(map_img, f"Step : {infos['step']}", (map_img.shape[1] - 150, 40), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # Add the probabilities of the pacman agents taking an action at the bottom (as an histogram)
+        if infos['probabilities_moves'] is not None:
+            for x, agent_moves_prob in enumerate(infos['probabilities_moves']):
+                for i, probs in enumerate(agent_moves_prob):
+                    for j, prob in enumerate(probs):
+                        # Calculate the x offset for the second agent with a gap of 50 pixels
+                        x_offset = x * 250 + 50
+
+                        # Draw a rectangle for each action (the height of the rectangle is proportional to the probability)
+                        cv2.rectangle(map_img, (x_offset + j*25, map_img.shape[0] - 25), (x_offset + (j+1)*25, map_img.shape[0] - 25 - int(prob*100)), (255, 255, 255), -1)
+
+                        # Write the name of the action (UP, DOWN, LEFT, RIGHT) at the bottom of the rectangle
+                        cv2.putText(map_img, ["U", "D", "L", "R"][j], (x_offset + j*25 + 5, map_img.shape[0] - 5), font, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
 
         return map_img
 

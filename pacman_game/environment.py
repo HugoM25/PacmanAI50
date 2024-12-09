@@ -10,15 +10,16 @@ from pacman_game.ghosts import *
 MAX_STEPS = 1500
 
 REWARDS = {
-    "RW_GUM": 10,
-    "RW_SUPER_GUM": 20,
-    "RW_EMPTY": -5,
-    "RW_NO_MOVE": -10,
-    "RW_DYING_TO_GHOST": -500,
-    "RW_EATING_GHOST": 50,
-    "RW_WINNING": 1000000,
-    "RW_TURNING_BACK": -10,
-    "RW_KEY": 10
+    "RW_GUM": 0.6,
+    "RW_SUPER_GUM": 0.8,
+    "RW_EMPTY": 0.0,
+    "RW_NO_MOVE": -0.5,
+    "RW_DYING_TO_GHOST": -1,
+    "RW_EATING_GHOST": 0.9,
+    "RW_WINNING": 1,
+    "RW_TURNING_BACK": -0.4,
+    "RW_KEY": 0.7,
+    "RW_LIVING": -0.05
 }
 
 ACTION_MAP = {
@@ -112,6 +113,8 @@ class PacmanEnv(gym.Env):
             if not agent.alive:
                 continue
 
+            rewards[agent_index] += REWARDS["RW_LIVING"]
+
             # Decrease the superpower step left
             if agent.superpower_step_left > 0:
                 agent.superpower_step_left -= 1
@@ -151,6 +154,7 @@ class PacmanEnv(gym.Env):
                 self.nb_pacgum -= 1
                 # Reward the agent
                 rewards[agent_index] += REWARDS["RW_GUM"]
+                agent.score += 10
 
             elif candidate_cell_type == SUPER_GUM:
                 # Pick it up
@@ -159,12 +163,14 @@ class PacmanEnv(gym.Env):
                 agent.superpower_step_left = 60
                 # Reward the agent
                 rewards[agent_index] += REWARDS["RW_SUPER_GUM"]
+                agent.score += 50
 
             elif candidate_cell_type == FRUIT:
                 # Pick it up
                 self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
                 # Reward the agent
                 rewards[agent_index] += REWARDS["RW_GUM"]
+                agent.score += 100
 
             elif candidate_cell_type == KEY:
                 # Pick it up
@@ -186,6 +192,8 @@ class PacmanEnv(gym.Env):
                         ghost.reset()
                         # Reward the agent
                         rewards[agent_index] += REWARDS["RW_EATING_GHOST"]
+
+                        agent.score += 200
                     else:
                         # Kill the pacman
                         agent.alive = False
@@ -201,7 +209,6 @@ class PacmanEnv(gym.Env):
                         # Don't move
                         no_obstacles = False
                         rewards[agent_index] += REWARDS["RW_NO_MOVE"]
-
             # Move the agent
             if no_obstacles:
                 agent.position = candidate_position
@@ -237,6 +244,7 @@ class PacmanEnv(gym.Env):
                         ghost.reset()
                         # Reward the pacman agent
                         rewards[agent_index] += REWARDS["RW_EATING_GHOST"]
+                        agent.score += 200
                         ghost_died = True
                     else:
                         # Kill the pacman
@@ -262,6 +270,9 @@ class PacmanEnv(gym.Env):
                 "end_cause": "Episode truncated. Max steps reached"
             }
 
+            for agent in self.agents:
+                rewards[agent_index] +=  -1 * self.nb_pacgum
+
         # Check if all the agents are dead
         elif self.alive_agents <= 0:
             done = True
@@ -270,12 +281,11 @@ class PacmanEnv(gym.Env):
                 "end_cause": "Episode done. All the agents are dead"
             }
 
+
         # Check if all the pacgum are eaten
         elif self.nb_pacgum == 0:
-            # Give rewards based on steps left to the agents alive
             for agent in self.agents:
-                rewards[agent_index] += REWARDS["RW_WINNING"] / self.current_step
-
+                rewards[agent_index] += REWARDS["RW_WINNING"]
             done = True
 
             info = {
@@ -327,7 +337,8 @@ class PacmanEnv(gym.Env):
                 [int(self.agents[i].position[0]), int(self.agents[i].position[1]), # Position x, y of the agent
                  int(self.agents[i].last_action), # Last action of the agent
                  int(self.agents[i].superpower_step_left),  # Superpower step left
-                 int(score_other_agent), int(self.agents[i].score) # Score of the other agent and this agent
+                 int(score_other_agent), int(self.agents[i].score), # Score of the other agent and this agent
+                 int(self.agents[i].has_key) # Has key
                  ]
             )
 
@@ -361,5 +372,5 @@ class PacmanEnv(gym.Env):
         return self._get_observations(), info
 
 
-    def render(self, mode='rgb_array'):
-        return self.map.render(mode, self.agents, self.ghosts)
+    def render(self, mode='rgb_array', infos=None):
+        return self.map.render(mode, self.agents, self.ghosts, infos)
