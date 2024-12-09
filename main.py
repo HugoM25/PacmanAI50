@@ -37,11 +37,21 @@ from models import *
 # gae_lambda = 0.95
 
 # Hyperparameters
-learning_rate = 1e-5
-gamma = 0.95
-clip_epsilon = 0.2
+# learning_rate = 1e-5
+# gamma = 0.95
+# clip_epsilon = 0.2
+# entropy_coefficient = 0.01
+# value_coefficient = 0.2
+# buffer_size = 4096
+# batch_size = 64
+# epochs = 4
+# gae_lambda = 0.95
+
+learning_rate = 1e-4
+gamma = 0.99
+clip_epsilon = 0.1
 entropy_coefficient = 0.01
-value_coefficient = 0.2
+value_coefficient = 0.5
 buffer_size = 4096
 batch_size = 64
 epochs = 4
@@ -53,7 +63,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize the environment
-    level_list_to_use = ["pacman_game/res/levels/level_10.csv"]
+    level_list_to_use = ['pacman_game/res/levels/level_0.csv', 'pacman_game/res/levels/level_00.csv']
+    #level_list_to_use = ["pacman_game/res/levels/level_10.csv", "pacman_game/res/levels/level_11.csv", "pacman_game/res/levels/level_12.csv", "pacman_game/res/levels/level_13.csv", "pacman_game/res/levels/level_14.csv"]
     environment = PacmanEnv(levels_paths=level_list_to_use)
 
     # Initialize the trainer
@@ -71,7 +82,7 @@ if __name__ == "__main__":
                          epochs=epochs,
                          batch_size=batch_size,
                          n_steps=buffer_size,
-                         use_action_masks=True,
+                         use_action_masks=False,
                          mask_penalty=1.0)
 
     # trainer.load_model("human_trained_model.pth")

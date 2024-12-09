@@ -369,7 +369,7 @@ class PacmanModel(nn.Module):
         )
 
         conv_out_size = self.get_conv_output_size((1, obs_shape[0], obs_shape[1]))
-        additional_info_size = 6
+        additional_info_size = 7
 
         self.fc = nn.Sequential(
             nn.Linear(conv_out_size + additional_info_size, 256),
@@ -397,7 +397,7 @@ class PacmanModel(nn.Module):
         map_obs_t = map_obs_t.unsqueeze(1)
         # Pass map through conv layers
         map_obs_t = self.conv_net(map_obs_t)
-        
+
         # Flatten the input
         map_obs_t = map_obs_t.view(map_obs_t.size(0), -1)
 
