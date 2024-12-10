@@ -214,7 +214,7 @@ class Map :
 
 
         # Add padding to the image
-        map_img = cv2.copyMakeBorder(map_img, 10, 10, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
+        map_img = cv2.copyMakeBorder(map_img, 50, 50, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
 
         # Scale the image up
         map_img = cv2.resize(map_img, (map_img.shape[1]*2, map_img.shape[0]*2), interpolation=cv2.INTER_NEAREST)
@@ -239,11 +239,21 @@ class Map :
                         # Calculate the x offset for the second agent with a gap of 50 pixels
                         x_offset = x * 250 + 50
 
+                        # Calculate the color intensity based on the probability (higher probability means whiter color)
+                        color_intensity = int(prob * 255)
+                        color = (color_intensity, color_intensity, color_intensity)
+
                         # Draw a rectangle for each action (the height of the rectangle is proportional to the probability)
-                        cv2.rectangle(map_img, (x_offset + j*25, map_img.shape[0] - 25), (x_offset + (j+1)*25, map_img.shape[0] - 25 - int(prob*100)), (255, 255, 255), -1)
+                        cv2.rectangle(map_img, (x_offset + j*25, map_img.shape[0] - 25), (x_offset + (j+1)*25, map_img.shape[0] - 25 - int(prob*100)), color, -1)
 
                         # Write the name of the action (UP, DOWN, LEFT, RIGHT) at the bottom of the rectangle
                         cv2.putText(map_img, ["U", "D", "L", "R"][j], (x_offset + j*25 + 5, map_img.shape[0] - 5), font, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # If rewards earned by the pacman agents are available, display them
+        if infos['rewards_earned'] is not None :
+            # Add the rewards on the left of the image. Like a list of rewards for each pacman agent
+            for i, reward in enumerate(infos['rewards_earned']):
+                cv2.putText(map_img, f"J{i} reward : {reward}", (20, map_img.shape[0] - 20 - i*20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
         return map_img
 

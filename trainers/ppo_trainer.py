@@ -12,7 +12,25 @@ from trainers.trainer import Trainer
 from torch.utils.tensorboard import SummaryWriter
 
 class PPOTrainer(Trainer):
-    def __init__(self, env, model, device, optimizer, clip_epsilon, gamma, entropy_coef, value_coef, epochs=4, batch_size=32, n_steps=2048, gae_lambda=0.95, use_action_masks=False, mask_penalty=1.0):
+    def __init__(self,
+                 env,
+                 model,
+                 device,
+                 optimizer,
+                 clip_epsilon,
+                 gamma,
+                 entropy_coef,
+                 value_coef,
+                 epochs=4,
+                 batch_size=32,
+                 n_steps=2048,
+                 gae_lambda=0.95,
+                 use_action_masks=False,
+                 mask_penalty=1.0,
+                 save_video_freq=-1,
+                 show_gameplay_freq=-1
+                 ):
+
         self.env = env
         self.model = model.to(device)
         self.device = device
@@ -32,6 +50,8 @@ class PPOTrainer(Trainer):
 
         # Monitor the training
         self.writer = SummaryWriter()
+        self.save_video_freq = save_video_freq
+        self.show_gameplay_freq = show_gameplay_freq
 
     def compute_advantages(self, rewards, dones, values, next_value):
         advantages = []
@@ -191,13 +211,27 @@ class PPOTrainer(Trainer):
         return mask_loss
 
 
-    def render(self, infos=None):
-
-        img = self.env.render(mode='rgb_array', infos=infos)
+    def show_gameplay(self, img):
         cv2.imshow('Pacman', img)
         # Simplified key check
         return cv2.waitKey(1) != ord('q')
 
+    def render_video(self, name="episode"):
+
+        if not self.video_frames:
+            return
+
+        height, width, _ = self.video_frames[0].shape
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(f"videos/{name}.mp4", fourcc, 10.0, (width, height))
+
+        for frame in self.video_frames:
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            frame_rgb= cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            out.write(frame_rgb)
+
+        out.release()
+        self.video_frames = []
 
     def train(self, max_steps):
         mean_rewards_buffer = deque(maxlen=100)
@@ -221,19 +255,35 @@ class PPOTrainer(Trainer):
 
             last_proba_actions = [[] for _ in range(self.env.nb_agents)]
 
+            self.video_frames = []
+
+            show_episode_gameplay = self.show_gameplay_freq >= 0 and episode_count % self.show_gameplay_freq == 0
+            save_episode_video = self.save_video_freq != -1 and episode_count % self.save_video_freq == 0
+
+            rewards_earned = []
+
             # Collect trajectories by playing the game
             while len(rewards[0]) < self.n_steps and not done:
 
                 current_step += 1
 
                 # Render the environment every X episodes
-                if episode_count % 1 == 0:
+                if show_episode_gameplay or save_episode_video:
+
                     disp_infos = {'episode': episode_count,
                                   'step': len(rewards[0]),
                                   'rewards': episode_rewards[0],
-                                  'probabilities_moves': last_proba_actions
+                                  'probabilities_moves': last_proba_actions,
+                                  'rewards_earned': rewards_earned
                                   }
-                    self.render(disp_infos)
+
+                    img = self.env.render(mode='rgb_array', infos=disp_infos)
+
+                    if show_episode_gameplay :
+                        self.show_gameplay(img)
+
+                    if save_episode_video :
+                        self.video_frames.append(img)
 
                 actions_to_play = []
 
@@ -290,9 +340,10 @@ class PPOTrainer(Trainer):
 
 
             if episode_count % 1 == 0:
-                print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer)}, episode rewards: {episode_rewards[0]}")
+                print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer):.3f}, episode rewards: {episode_rewards[0]:.3f}")
 
-
+            if self.save_video_freq != -1:
+                self.render_video(name=f"episode_{episode_count}")
 
             # Update the model
             for trajectory in trajectories:
@@ -305,6 +356,7 @@ class PPOTrainer(Trainer):
             self.writer.add_scalar('Rewards/mean_reward', np.mean(episode_rewards), global_step=current_step)
 
             self.writer.iteration += 1
+
         self.save_model()
         self.writer.close()
 
@@ -312,4 +364,4 @@ class PPOTrainer(Trainer):
         torch.save(self.model.state_dict(), "model.pth")
 
     def load_model(self, path):
-        self.model.load_state_dict(torch.load(path))
+        self.model.load_state_dict(torch.load(path), map_location=self.device)
