@@ -52,8 +52,8 @@ gamma = 0.99
 clip_epsilon = 0.1
 entropy_coefficient = 0.01
 value_coefficient = 0.5
-buffer_size = 4096
-batch_size = 64
+buffer_size = 2048
+batch_size = 32
 epochs = 4
 gae_lambda = 0.95
 
@@ -82,11 +82,13 @@ if __name__ == "__main__":
                          epochs=epochs,
                          batch_size=batch_size,
                          n_steps=buffer_size,
-                         use_action_masks=False,
-                         mask_penalty=1.0)
+                         use_action_masks=True,
+                         mask_penalty=1.0,
+                         show_gameplay_freq=-1,
+                         save_video_freq=50)
 
     # trainer.load_model("human_trained_model.pth")
-    # trainer.load_model("model2_trained.pth")
+    #trainer.load_model("model2_trained.pth")
 
     # Perform training
     trainer.train(1_000_000)
