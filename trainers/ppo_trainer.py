@@ -274,7 +274,7 @@ class PPOTrainer(Trainer):
                                   'step': len(rewards[0]),
                                   'rewards': episode_rewards[0],
                                   'probabilities_moves': last_proba_actions,
-                                  'rewards_earned': rewards_earned
+                                  'rewards_earned': rewards_earned,
                                   }
 
                     img = self.env.render(mode='rgb_array', infos=disp_infos)

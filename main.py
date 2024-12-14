@@ -63,7 +63,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize the environment
-    level_list_to_use = ['pacman_game/res/levels/level_0.csv', 'pacman_game/res/levels/level_00.csv']
+    #level_list_to_use = ['pacman_game/res/levels/level_0.csv', 'pacman_game/res/levels/level_00.csv']
+    level_list_to_use = ['pacman_game/res/levels/level_1.csv']
     #level_list_to_use = ["pacman_game/res/levels/level_10.csv", "pacman_game/res/levels/level_11.csv", "pacman_game/res/levels/level_12.csv", "pacman_game/res/levels/level_13.csv", "pacman_game/res/levels/level_14.csv"]
     environment = PacmanEnv(levels_paths=level_list_to_use)
 
@@ -84,7 +85,7 @@ if __name__ == "__main__":
                          n_steps=buffer_size,
                          use_action_masks=True,
                          mask_penalty=1.0,
-                         show_gameplay_freq=-1,
+                         show_gameplay_freq=1,
                          save_video_freq=50)
 
     # trainer.load_model("human_trained_model.pth")

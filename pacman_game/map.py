@@ -3,21 +3,7 @@ import csv
 import json
 import cv2
 
-
-EMPTY = 0
-GUM = 1
-SUPER_GUM = 2
-GHOST_INKY = 3
-GHOST_BLINKY = 4
-GHOST_PINKY = 5
-GHOST_CLYDE = 6
-PACMAN = 7
-FRUIT = 8
-WALL = 9
-GHOST_DOOR = 10
-PACMAN_RIVAL = 11
-KEY = 12
-DOOR = 13
+from pacman_game.constants import *
 
 class Map :
 
@@ -154,6 +140,7 @@ class Map :
         Render the map as an RGB array.
         :return: The RGB array of the map as a numpy array
         '''
+        font = cv2.FONT_HERSHEY_SIMPLEX
         map_img = self.background.copy()
 
         for i in range(self.type_map.shape[0]):
@@ -185,6 +172,10 @@ class Map :
                 tile_region[:, :, c] = (alpha_ghost * ghost_tile[:, :, c] +
                             (1 - alpha_ghost) * tile_region[:, :, c])
 
+
+            # # Write its x,y position on top of the ghost
+            # cv2.putText(map_img, f"({x},{y})", (y*self.tile_size + 5, x*self.tile_size + 15), font, 0.3, (255, 255, 255), 1, cv2.LINE_AA)
+
         # Add the pacman agents to the image with transparency
         pacman_tile = self.tiles[6][:, :, :]
 
@@ -212,6 +203,29 @@ class Map :
             # Add the pacman to the image
             map_img[x*self.tile_size:(x+1)*self.tile_size, y*self.tile_size:(y+1)*self.tile_size] = pacman_tile_rotated
 
+            # # Write its x,y position on top of pacman
+            # cv2.putText(map_img, f"({x},{y})", (y*self.tile_size + 5, x*self.tile_size + 15), font, 0.3, (255, 255, 255), 1, cv2.LINE_AA)
+
+        # ADD on every 5 tile of the map the position (x,y) of the tile
+        # for i in range(self.type_map.shape[0]):
+        #     for j in range(self.type_map.shape[1]):
+        #         if i % 5 == 0 and j % 5 == 0:
+        #             cv2.putText(map_img, f"({i},{j})", (j*self.tile_size + 5, i*self.tile_size + 15), font, 0.3, (255, 255, 255), 1, cv2.LINE_AA)
+
+        if infos is not None :
+            # Show the path planned by the ghosts
+            if 'ghosts_paths' in infos:
+                        colors_paths = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0)]
+                        for color_index, ghost_type in enumerate([GHOST_BLINKY, GHOST_INKY, GHOST_PINKY, GHOST_CLYDE]):
+                            if ghost_type in infos['ghosts_paths'] and infos['ghosts_paths'][ghost_type] is not None:
+                                path = infos['ghosts_paths'][ghost_type]
+                                for i in range(len(path)-1):
+                                    start_pos = path[i]
+                                    end_pos = path[i + 1]
+                                    start_x, start_y = start_pos
+                                    end_x, end_y = end_pos
+                                    cv2.line(map_img, (start_y*self.tile_size + self.tile_size//2, start_x*self.tile_size + self.tile_size//2),
+                                            (end_y*self.tile_size + self.tile_size//2, end_x*self.tile_size + self.tile_size//2), colors_paths[color_index], 1)
 
         # Add padding to the image
         map_img = cv2.copyMakeBorder(map_img, 50, 50, 0, 0, cv2.BORDER_CONSTANT, value=[0, 0, 0, 0])
@@ -220,40 +234,42 @@ class Map :
         map_img = cv2.resize(map_img, (map_img.shape[1]*2, map_img.shape[0]*2), interpolation=cv2.INTER_NEAREST)
 
         # Add the score of the pacman agents to the image at the top left corner of the image
-        font = cv2.FONT_HERSHEY_SIMPLEX
         for i, pacman in enumerate(pacman_agents):
             cv2.putText(map_img, f"J{i} score : {pacman.score}", (20, 20 + i*20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
-        # Add the episode number to the image at the top right corner of the image
-        if infos['episode'] is not None:
-            cv2.putText(map_img, f"Episode : {infos['episode']}", (map_img.shape[1] - 150, 20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
-        # Add the step number to the image at the top right corner of the image
-        if infos['step'] is not None:
-            cv2.putText(map_img, f"Step : {infos['step']}", (map_img.shape[1] - 150, 40), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
-        # Add the probabilities of the pacman agents taking an action at the bottom (as an histogram)
-        if infos['probabilities_moves'] is not None:
-            for x, agent_moves_prob in enumerate(infos['probabilities_moves']):
-                for i, probs in enumerate(agent_moves_prob):
-                    for j, prob in enumerate(probs):
-                        # Calculate the x offset for the second agent with a gap of 50 pixels
-                        x_offset = x * 250 + 50
+        if infos is not None:
+            # Add the episode number to the image at the top right corner of the image
+            if 'episode' in infos and infos['episode'] is not None:
+                cv2.putText(map_img, f"Episode : {infos['episode']}", (map_img.shape[1] - 150, 20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+            # Add the step number to the image at the top right corner of the image
+            if 'step' in infos and infos['step'] is not None:
+                cv2.putText(map_img, f"Step : {infos['step']}", (map_img.shape[1] - 150, 40), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
-                        # Calculate the color intensity based on the probability (higher probability means whiter color)
-                        color_intensity = int(prob * 255)
-                        color = (color_intensity, color_intensity, color_intensity)
+            # Add the probabilities of the pacman agents taking an action at the bottom (as an histogram)
+            if 'probabilities_moves' in infos and infos['probabilities_moves'] is not None:
+                for x, agent_moves_prob in enumerate(infos['probabilities_moves']):
+                    for i, probs in enumerate(agent_moves_prob):
+                        for j, prob in enumerate(probs):
+                            # Calculate the x offset for the second agent with a gap of 50 pixels
+                            x_offset = x * 250 + 50
 
-                        # Draw a rectangle for each action (the height of the rectangle is proportional to the probability)
-                        cv2.rectangle(map_img, (x_offset + j*25, map_img.shape[0] - 25), (x_offset + (j+1)*25, map_img.shape[0] - 25 - int(prob*100)), color, -1)
+                            # Calculate the color intensity based on the probability (higher probability means whiter color)
+                            color_intensity = int(prob * 255)
+                            color = (color_intensity, color_intensity, color_intensity)
 
-                        # Write the name of the action (UP, DOWN, LEFT, RIGHT) at the bottom of the rectangle
-                        cv2.putText(map_img, ["U", "D", "L", "R"][j], (x_offset + j*25 + 5, map_img.shape[0] - 5), font, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+                            # Draw a rectangle for each action (the height of the rectangle is proportional to the probability)
+                            cv2.rectangle(map_img, (x_offset + j*25, map_img.shape[0] - 25), (x_offset + (j+1)*25, map_img.shape[0] - 25 - int(prob*100)), color, -1)
 
-        # If rewards earned by the pacman agents are available, display them
-        if infos['rewards_earned'] is not None :
-            # Add the rewards on the left of the image. Like a list of rewards for each pacman agent
-            for i, reward in enumerate(infos['rewards_earned']):
-                cv2.putText(map_img, f"J{i} reward : {reward}", (20, map_img.shape[0] - 20 - i*20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                            # Write the name of the action (UP, DOWN, LEFT, RIGHT) at the bottom of the rectangle
+                            cv2.putText(map_img, ["U", "D", "L", "R"][j], (x_offset + j*25 + 5, map_img.shape[0] - 5), font, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+
+
+            # If rewards earned by the pacman agents are available, display them
+            # if infos['rewards_earned'] is not None :
+            #     # Add the rewards on the left of the image. Like a list of rewards for each pacman agent
+            #     for i, reward in enumerate(infos['rewards_earned']):
+            #         cv2.putText(map_img, f"J{i} reward : {reward}", (20, map_img.shape[0] - 20 - i*20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
         return map_img
 
