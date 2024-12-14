@@ -7,35 +7,8 @@ from pacman_game.map import *
 from pacman_game.pacman import Pacman
 from pacman_game.ghosts import *
 
-MAX_STEPS = 1500
-
-REWARDS = {
-    "RW_GUM": 0.6,
-    "RW_SUPER_GUM": 0.8,
-    "RW_EMPTY": 0.0,
-    "RW_NO_MOVE": -0.5,
-    "RW_DYING_TO_GHOST": -1,
-    "RW_EATING_GHOST": 0.9,
-    "RW_WINNING": 1,
-    "RW_TURNING_BACK": -0.4,
-    "RW_KEY": 0.7,
-    "RW_LIVING": -0.05
-}
-
-ACTION_MAP = {
-    0: np.array([-1, 0]),  # Up
-    1: np.array([1, 0]),   # Down
-    2: np.array([0, -1]),  # Left
-    3: np.array([0, 1]),   # Right
-}
-
-OPPOSITE_ACTION = {
-    0: 1,
-    1: 0,
-    2: 3,
-    3: 2
-}
-
+from pacman_game.algorithms import NavigationAlgo
+from pacman_game.constants import *
 
 class PacmanEnv(gym.Env):
     def __init__(self, levels_paths):
@@ -57,6 +30,9 @@ class PacmanEnv(gym.Env):
         # Define the observation space
         # All the agents see the same thing : the level matrix (only the type of the cell not the tile index)
         self.observation_space = spaces.Box(low=0, high=12, shape=self.map.type_map.shape, dtype=np.uint8)
+
+        # Instantiate the navigation algorithms
+        self.navigation_algo = NavigationAlgo(self.map.type_map)
 
     def load_level(self, level_csv_path:str):
         # Load the map
@@ -96,11 +72,13 @@ class PacmanEnv(gym.Env):
 
     def step(self, actions):
 
+        self.navigation_algo.current_map = self.map.type_map
+
         # Initialize the rewards for all agents
         rewards = np.zeros(self.nb_agents)
 
         truncated = False
-        info = {}
+        info = {"ghosts_paths": {}}
         done = False
 
         # Handle the actions of the pacman agents
@@ -219,10 +197,12 @@ class PacmanEnv(gym.Env):
             if not ghost.is_free:
                 continue
 
-            pacman_positions = [agent.position for agent in self.agents if agent.alive]
             # Choose the direction
-            ghost_action = ghost.choose_direction(self.map.type_map, pacman_positions)
+            ghost_action, ghost_path = ghost.choose_direction(self.agents, self.navigation_algo, self.ghosts)
             candidate_ghost_position = ghost.position + ACTION_MAP[ghost_action]
+
+            if ghost_path:
+                info["ghosts_paths"][ghost.ghost_type] = ghost_path
 
             # Check if the candidate position is valid
             candidate_ghost_position = (candidate_ghost_position + self.map.type_map.shape) % self.map.type_map.shape
@@ -368,6 +348,8 @@ class PacmanEnv(gym.Env):
             ghost.reset()
 
         self.nb_pacgum = self.nb_pacgum_start
+
+        self.navigation_algo.current_map = self.map.type_map
 
         return self._get_observations(), info
 
