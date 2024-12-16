@@ -12,7 +12,7 @@ class Ghost:
         self.is_free = True
         self.pacman_target = None
         self.detection_range = 10000  # Portée maximale de détection de Pacman
-
+        self.prob_random_move = 0.3
 
     def choose_direction(self, pacmans: list[Pacman], navigation_algo:NavigationAlgo, ghosts) -> int:
         '''
@@ -32,6 +32,10 @@ class Ghost:
         closest_distance = float('inf')
 
         for pacman in pacmans:
+            
+            if pacman.alive == False:
+                continue
+
             distance = navigation_algo.heuristic(self.position, pacman.position)
             if distance < closest_distance:
                 closest_distance = distance
@@ -68,36 +72,36 @@ class Blinky(Ghost):
         """
         Blinky est le fantôme rouge. Il poursuit le Pacman le plus proche en utilisant A* s'il est à portée, sinon il explore.
         """
-
-        path = None
+        direction, path = -1, None
 
         # Find the closest Pacman on the map
         closest_pacman, closest_distance = self.find_pacman_target(pacmans, navigation_algo)
 
-        direction = -1
-
         # If the closest Pacman is in the detection range, use A* to find the shortest path
         if closest_distance <= self.detection_range:
             direction, path = self.get_action_path(closest_pacman.position, navigation_algo)
-
-        if direction == -1 :
-            direction = random.randint(0, 3)
-
-        # If the closest Pacman is not in the detection range, move randomly
+        
+        # Check if the closest pacman is in super mode 
+        if closest_pacman.superpower_step_left > 0:
+            # If the Pacman is in super the ghost should run away (go in the opposite direction)
+            # Random chance to go in a random direction while afraid
+            if random.random() < self.prob_random_move :
+                direction = OPPOSITE_ACTION[direction]
+    
         return direction, path
 
 class Pinky(Ghost):
     def __init__(self, position: tuple[int, int]):
         super().__init__(position=position)
         self.ghost_type = GHOST_PINKY
-        self.target = None
+        self.target_pos = None
 
     def choose_direction(self, pacmans: list[Pacman], navigation_algo:NavigationAlgo, ghosts) -> int:
         '''
         Pinky is the pink ghost. She tries to ambush Pacman.
         Pour le moment, Pinky se déplace aléatoirement, mais accepte les positions des Pacmans.
         '''
-        path = None
+        direction, path = -1, None
 
         # Find the closest Pacman on the map
         closest_pacman, closest_distance = self.find_pacman_target(pacmans, navigation_algo)
@@ -110,20 +114,25 @@ class Pinky(Ghost):
             target = (closest_pacman.position[0] + tiles_ahead * direction_pacman[0], closest_pacman.position[1] + tiles_ahead * direction_pacman[1])
 
             if target[0] < MAP_HEIGHT and target[1] < MAP_WIDTH:
-                self.target = target
+                self.target_pos = target
 
-            if self.target ==  None:
+            if type(self.target_pos) ==  None:
                 return random.randint(0, 3), path
         else :
-            self.target = closest_pacman.position
+            self.target_pos = closest_pacman.position
 
         direction = -1
 
         if self.detection_range >= closest_distance:
-            direction, path = self.get_action_path(self.target, navigation_algo)
+            direction, path = self.get_action_path(self.target_pos, navigation_algo)
 
         if direction == -1 :
             direction = random.randint(0, 3)
+
+        # Check if the Pacman is currently in super mode
+        if closest_pacman.superpower_step_left > 0: 
+            # If the Pacman is in super, the ghost will run away
+            direction = OPPOSITE_ACTION[direction]
 
         # If the closest Pacman is not in the detection range, move randomly
         return direction, path
@@ -152,6 +161,11 @@ class Inky(Ghost):
 
         if direction == -1 :
             direction = random.randint(0, 3)
+
+        # Check if the Pacman is currently in super mode
+        if closest_pacman.superpower_step_left > 0: 
+            # If the Pacman is in super, the ghost will run away
+            direction = OPPOSITE_ACTION[direction]
 
         # If the closest Pacman is not in the detection range, move randomly
         return direction, path

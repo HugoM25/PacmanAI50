@@ -11,7 +11,7 @@ from pacman_game.algorithms import NavigationAlgo
 from pacman_game.constants import *
 
 class PacmanEnv(gym.Env):
-    def __init__(self, levels_paths):
+    def __init__(self, levels_paths, freq_change_level=1):
         super().__init__()
 
         # Check if level folder path is a list or a string
@@ -34,8 +34,12 @@ class PacmanEnv(gym.Env):
         # Instantiate the navigation algorithms
         self.navigation_algo = NavigationAlgo(self.map.type_map)
 
+        self.freq_change_level = freq_change_level
+        self.ep_before_change_level = freq_change_level
+
     def load_level(self, level_csv_path:str):
         # Load the map
+        self.current_level_name = level_csv_path
         self.map = Map(level_csv_path)
 
         # Parse the number of players and the initial positions ---------------
@@ -332,10 +336,12 @@ class PacmanEnv(gym.Env):
         self.max_steps = MAX_STEPS
 
         # If the level folder path is a list then choose a random level
-        if len(self.levels_paths) > 1:
+        if len(self.levels_paths) > 1 and self.ep_before_change_level <= 0:
             level_index = np.random.randint(0, len(self.levels_paths))
             self.load_level(self.levels_paths[level_index])
-
+            self.ep_before_change_level = self.freq_change_level
+        
+        self.ep_before_change_level -= 1
         # Reset the map
         self.map.reset()
 
