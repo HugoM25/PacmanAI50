@@ -28,7 +28,8 @@ class PPOTrainer(Trainer):
                  use_action_masks=False,
                  mask_penalty=1.0,
                  save_video_freq=-1,
-                 show_gameplay_freq=-1
+                 show_gameplay_freq=-1,
+                 save_model_freq=10_000
                  ):
 
         self.env = env
@@ -52,6 +53,7 @@ class PPOTrainer(Trainer):
         self.writer = SummaryWriter()
         self.save_video_freq = save_video_freq
         self.show_gameplay_freq = show_gameplay_freq
+        self.save_model_freq = save_model_freq
 
     def compute_advantages(self, rewards, dones, values, next_value):
         advantages = []
@@ -239,6 +241,8 @@ class PPOTrainer(Trainer):
         episode_count = 0
         self.writer.iteration = 0
 
+        self.save_model_countdown = self.save_model_freq
+
         # Train for num_steps
         while current_step < max_steps:
 
@@ -266,6 +270,7 @@ class PPOTrainer(Trainer):
             while len(rewards[0]) < self.n_steps and not done:
 
                 current_step += 1
+                self.save_model_countdown -= 1
 
                 # Render the environment every X episodes
                 if show_episode_gameplay or save_episode_video:
@@ -275,6 +280,7 @@ class PPOTrainer(Trainer):
                                   'rewards': episode_rewards[0],
                                   'probabilities_moves': last_proba_actions,
                                   'rewards_earned': rewards_earned,
+                                  'total_steps': current_step
                                   }
 
                     img = self.env.render(mode='rgb_array', infos=disp_infos)
@@ -292,7 +298,6 @@ class PPOTrainer(Trainer):
                         map_obs, info_obs = observation
                         map_state_tensor = torch.tensor(map_obs, dtype=torch.float32).unsqueeze(0).to(self.device)
                         info_state_tensor = torch.tensor(info_obs, dtype=torch.float32).unsqueeze(0).to(self.device)
-
 
                         logits, value = self.model(map_state_tensor, info_state_tensor)
 
@@ -340,7 +345,7 @@ class PPOTrainer(Trainer):
 
 
             if episode_count % 1 == 0:
-                print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer):.3f}, episode rewards: {episode_rewards[0]:.3f}")
+                print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer):.3f}, episode rewards: {episode_rewards[0]:.3f} on env : {self.env.current_level_name}")
 
             if self.save_video_freq != -1:
                 self.render_video(name=f"episode_{episode_count}")
@@ -349,8 +354,10 @@ class PPOTrainer(Trainer):
             for trajectory in trajectories:
                 self.update_model(trajectory)
 
-            if current_step % 50000 == 0:
-                self.save_model()
+            if self.save_model_countdown <= 0 :
+                print(f"Saving model at step {current_step}")
+                self.save_model(current_step)
+                self.save_model_countdown = self.save_model_freq
 
             self.writer.add_scalar('Rewards/episode_reward', episode_rewards[0], global_step=current_step)
             self.writer.add_scalar('Rewards/mean_reward', np.mean(episode_rewards), global_step=current_step)
@@ -360,8 +367,8 @@ class PPOTrainer(Trainer):
         self.save_model()
         self.writer.close()
 
-    def save_model(self):
-        torch.save(self.model.state_dict(), "model.pth")
+    def save_model(self, steps=0):
+        torch.save(self.model.state_dict(), f"models/model{steps}.pth")
 
     def load_model(self, path):
-        self.model.load_state_dict(torch.load(path), map_location=self.device)
+        self.model.load_state_dict(torch.load(path))

@@ -20,16 +20,16 @@ OPPOSITE_ACTION = {
 }
 
 REWARDS = {
-    "RW_GUM": 0.6,
-    "RW_SUPER_GUM": 0.8,
-    "RW_EMPTY": 0.0,
-    "RW_NO_MOVE": -0.5,
-    "RW_DYING_TO_GHOST": -1,
-    "RW_EATING_GHOST": 0.9,
-    "RW_WINNING": 1,
-    "RW_TURNING_BACK": -0.4,
-    "RW_KEY": 0.7,
-    "RW_LIVING": -0.05
+    "RW_GUM": 10,
+    "RW_SUPER_GUM": 10,
+    "RW_EMPTY": -0.0,
+    "RW_NO_MOVE": -10,
+    "RW_DYING_TO_GHOST": -10,
+    "RW_EATING_GHOST": 10,
+    "RW_WINNING": 10000,
+    "RW_TURNING_BACK": -0.6,
+    "RW_KEY": 7,
+    "RW_LIVING": -0.5
 }
 
 MAX_STEPS = 1500

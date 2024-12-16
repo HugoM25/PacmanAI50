@@ -241,11 +241,24 @@ class Map :
         if infos is not None:
             # Add the episode number to the image at the top right corner of the image
             if 'episode' in infos and infos['episode'] is not None:
-                cv2.putText(map_img, f"Episode : {infos['episode']}", (map_img.shape[1] - 150, 20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.putText(map_img, f"Episode : {infos['episode']}", (map_img.shape[1] - 200, 20), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
             # Add the step number to the image at the top right corner of the image
             if 'step' in infos and infos['step'] is not None:
-                cv2.putText(map_img, f"Step : {infos['step']}", (map_img.shape[1] - 150, 40), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.putText(map_img, f"Step : {infos['step']}", (map_img.shape[1] - 200, 40), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
+            if 'total_steps' in infos and infos['total_steps'] is not None:
+                # Simplify the total steps by writing 1k, 1M, 1B, 1T instead of 1000, 1000000, 1000000000, 1000000000000
+                total_steps = infos['total_steps']
+                if total_steps >= 1000000000000:
+                    total_steps = f"{total_steps // 1000000000000}T"
+                elif total_steps >= 1000000000:
+                    total_steps = f"{total_steps // 1000000000}B"
+                elif total_steps >= 1000000:
+                    total_steps = f"{total_steps // 1000000}M"
+                elif total_steps >= 1000:
+                    total_steps = f"{total_steps // 1000}k"
+                cv2.putText(map_img, f"Total steps : {total_steps}", (map_img.shape[1] - 200, 60), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                                
             # Add the probabilities of the pacman agents taking an action at the bottom (as an histogram)
             if 'probabilities_moves' in infos and infos['probabilities_moves'] is not None:
                 for x, agent_moves_prob in enumerate(infos['probabilities_moves']):
@@ -263,7 +276,7 @@ class Map :
 
                             # Write the name of the action (UP, DOWN, LEFT, RIGHT) at the bottom of the rectangle
                             cv2.putText(map_img, ["U", "D", "L", "R"][j], (x_offset + j*25 + 5, map_img.shape[0] - 5), font, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
-
+            
 
             # If rewards earned by the pacman agents are available, display them
             # if infos['rewards_earned'] is not None :

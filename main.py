@@ -47,9 +47,9 @@ from models import *
 # epochs = 4
 # gae_lambda = 0.95
 
-learning_rate = 1e-4
+learning_rate = 3e-4
 gamma = 0.99
-clip_epsilon = 0.1
+clip_epsilon = 0.2
 entropy_coefficient = 0.01
 value_coefficient = 0.5
 buffer_size = 2048
@@ -57,16 +57,18 @@ batch_size = 32
 epochs = 4
 gae_lambda = 0.95
 
+
 if __name__ == "__main__":
 
     # Check if CUDA is available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize the environment
-    #level_list_to_use = ['pacman_game/res/levels/level_0.csv', 'pacman_game/res/levels/level_00.csv']
-    level_list_to_use = ['pacman_game/res/levels/level_1.csv']
-    #level_list_to_use = ["pacman_game/res/levels/level_10.csv", "pacman_game/res/levels/level_11.csv", "pacman_game/res/levels/level_12.csv", "pacman_game/res/levels/level_13.csv", "pacman_game/res/levels/level_14.csv"]
-    environment = PacmanEnv(levels_paths=level_list_to_use)
+    # level_list_to_use = ['pacman_game/res/levels/level_0.csv', 'pacman_game/res/levels/level_00.csv']
+    # level_list_to_use = ['pacman_game/res/levels/level_1_2.csv']
+    #level_list_to_use = ['pacman_game/res/levels/level_2.csv', 'pacman_game/res/levels/level_2_1.csv', 'pacman_game/res/levels/level_2_2.csv']
+    level_list_to_use = ["pacman_game/res/levels/level_10.csv", "pacman_game/res/levels/level_11.csv", "pacman_game/res/levels/level_12.csv", "pacman_game/res/levels/level_13.csv", "pacman_game/res/levels/level_14.csv"]
+    environment = PacmanEnv(levels_paths=level_list_to_use, freq_change_level=1)
 
     # Initialize the trainer
     model = PacmanModel(environment.observation_space.shape, 4)
@@ -85,12 +87,13 @@ if __name__ == "__main__":
                          n_steps=buffer_size,
                          use_action_masks=True,
                          mask_penalty=1.0,
-                         show_gameplay_freq=1,
-                         save_video_freq=50)
+                         show_gameplay_freq=-1,
+                         save_video_freq=100,
+                         save_model_freq=100_000)
 
     # trainer.load_model("human_trained_model.pth")
-    #trainer.load_model("model2_trained.pth")
+    # trainer.load_model("models/train_m3_lvl1_no/model2142000.pth")
 
     # Perform training
-    trainer.train(1_000_000)
+    trainer.train(20_000_000)
 

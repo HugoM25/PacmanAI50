@@ -49,9 +49,9 @@ class HumanCollector:
                     }
                 # Render the environment as seen by the agent
                 img = self.env.render(mode='rgb_array', infos=disp_info)
-
+                print("Rendering image")
                 cv2.imshow('Pacman', img)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                if cv2.waitKey(0) & 0xFF == ord('q'):
                     break
 
                 #Get the action from the human player
