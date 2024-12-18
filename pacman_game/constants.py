@@ -24,7 +24,7 @@ REWARDS = {
     "RW_SUPER_GUM": 10,
     "RW_EMPTY": -0.0,
     "RW_NO_MOVE": -10,
-    "RW_DYING_TO_GHOST": -10,
+    "RW_DYING_TO_GHOST": -10000,
     "RW_EATING_GHOST": 10,
     "RW_WINNING": 10000,
     "RW_TURNING_BACK": -0.6,

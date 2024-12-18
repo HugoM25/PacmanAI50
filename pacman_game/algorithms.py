@@ -2,6 +2,7 @@ import numpy as np
 import heapq
 from pacman_game.map import *
 from pacman_game.constants import *
+from collections import deque
 
 
 class NavigationAlgo:
@@ -63,4 +64,74 @@ class NavigationAlgo:
                     fscore[neighbor] = tentative_g_score + self.heuristic(neighbor, end_position)
                     heapq.heappush(oheap, (fscore[neighbor], neighbor))
 
+        return False  # No path found
+    
+    def find_shortest_path_bfs(self, start_position, end_position):
+        '''
+        Find the shortest path between two points using the BFS algorithm.
+        '''
+        neighbors = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # Right, Down, Left, Up
+        queue = deque([tuple(start_position)])
+        came_from = {tuple(start_position): None}
+        
+        while queue:
+            current = queue.popleft()
+            
+            if np.array_equal(current, end_position):
+                data = []
+                while current:
+                    data.append(current)
+                    current = came_from[current]
+                return data[::-1]  # Return reversed path
+            
+            for i, j in neighbors:
+                neighbor = current[0] + i, current[1] + j
+                
+                if 0 <= neighbor[0] < self.current_map.shape[0] and 0 <= neighbor[1] < self.current_map.shape[1]:
+                    if self.current_map[neighbor[0]][neighbor[1]] == WALL:
+                        continue
+                else:
+                    # Out of bounds
+                    continue
+                
+                neighbor = tuple(neighbor)
+                if neighbor not in came_from:
+                    queue.append(neighbor)
+                    came_from[neighbor] = current
+        
+        return False  # No path found
+    
+    def find_shortest_path_dfs(self, start_position, end_position):
+        '''
+        Find the shortest path between two points using the DFS algorithm.
+        '''
+        neighbors = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # Right, Down, Left, Up
+        stack = [tuple(start_position)]
+        came_from = {tuple(start_position): None}
+        
+        while stack:
+            current = stack.pop()
+            
+            if np.array_equal(current, end_position):
+                data = []
+                while current:
+                    data.append(current)
+                    current = came_from[current]
+                return data[::-1]  # Return reversed path
+            
+            for i, j in neighbors:
+                neighbor = current[0] + i, current[1] + j
+                
+                if 0 <= neighbor[0] < self.current_map.shape[0] and 0 <= neighbor[1] < self.current_map.shape[1]:
+                    if self.current_map[neighbor[0]][neighbor[1]] == WALL:
+                        continue
+                else:
+                    # Out of bounds
+                    continue
+                
+                neighbor = tuple(neighbor)
+                if neighbor not in came_from:
+                    stack.append(neighbor)
+                    came_from[neighbor] = current
+        
         return False  # No path found
