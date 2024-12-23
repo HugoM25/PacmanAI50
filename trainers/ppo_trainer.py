@@ -29,7 +29,9 @@ class PPOTrainer(Trainer):
                  mask_penalty=1.0,
                  save_video_freq=-1,
                  show_gameplay_freq=-1,
-                 save_model_freq=10_000
+                 save_model_freq=10_000,
+                 max_grad_norm=0.1,
+                 max_steps_env=1500
                  ):
 
         self.env = env
@@ -48,6 +50,13 @@ class PPOTrainer(Trainer):
         self.gae_lambda = gae_lambda
         self.use_action_masks = use_action_masks
         self.mask_penalty = mask_penalty
+        self.max_grad_norm = max_grad_norm
+
+        if max_steps_env > -1:
+            self.max_steps_env = max_steps_env
+            env.max_steps = max_steps_env
+        else :
+            self.max_steps_env = env.max_steps
 
         # Monitor the training
         self.writer = SummaryWriter()
@@ -147,7 +156,7 @@ class PPOTrainer(Trainer):
                 self.optimizer.zero_grad()
                 loss.backward()
                 # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
                 self.optimizer.step()
 
 
@@ -258,16 +267,15 @@ class PPOTrainer(Trainer):
             observations, _ = self.env.reset()
 
             last_proba_actions = [[] for _ in range(self.env.nb_agents)]
-
             self.video_frames = []
-
-            show_episode_gameplay = self.show_gameplay_freq >= 0 and episode_count % self.show_gameplay_freq == 0
-            save_episode_video = self.save_video_freq != -1 and episode_count % self.save_video_freq == 0
 
             rewards_earned = []
 
             # Collect trajectories by playing the game
-            while len(rewards[0]) < self.n_steps and not done:
+            while len(rewards[0]) < self.n_steps or not done:
+
+                show_episode_gameplay = self.show_gameplay_freq >= 0 and episode_count % self.show_gameplay_freq == 0
+                save_episode_video = self.save_video_freq != -1 and episode_count % self.save_video_freq == 0
 
                 current_step += 1
                 self.save_model_countdown -= 1
@@ -331,9 +339,21 @@ class PPOTrainer(Trainer):
                     episode_rewards[agent_index] += reward
 
                 if done or truncated:
+                    
+                    mean_rewards_buffer.append(np.mean(episode_rewards))
+                    self.writer.add_scalar('Rewards/episode_reward', episode_rewards[0], global_step=current_step)
+                    self.writer.add_scalar('Rewards/mean_reward', np.mean(episode_rewards), global_step=current_step)
+
+                    self.writer.iteration += 1
+                    if episode_count % 1 == 0:
+                        print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer):.3f}, episode rewards: {episode_rewards[0]:.3f} on env : {self.env.current_level_name}")
+                    
+                    if save_episode_video:
+                        self.render_video(name=f"episode_{episode_count}")
+
                     observations, _ = self.env.reset()
                     episode_count += 1
-
+                    episode_rewards = [0 for _ in range(self.env.nb_agents)]
 
                 # Zip the trajectories and return them
                 trajectories = []
@@ -341,14 +361,6 @@ class PPOTrainer(Trainer):
                     trajectories.append(
                         zip(states[agent_index], actions[agent_index], rewards[agent_index], dones[agent_index], log_probs[agent_index], values[agent_index]))
 
-            mean_rewards_buffer.append(np.mean(episode_rewards))
-
-
-            if episode_count % 1 == 0:
-                print(f"Episode: {episode_count}, Mean rewards: {np.mean(mean_rewards_buffer):.3f}, episode rewards: {episode_rewards[0]:.3f} on env : {self.env.current_level_name}")
-
-            if self.save_video_freq != -1:
-                self.render_video(name=f"episode_{episode_count}")
 
             # Update the model
             for trajectory in trajectories:
@@ -359,10 +371,7 @@ class PPOTrainer(Trainer):
                 self.save_model(current_step)
                 self.save_model_countdown = self.save_model_freq
 
-            self.writer.add_scalar('Rewards/episode_reward', episode_rewards[0], global_step=current_step)
-            self.writer.add_scalar('Rewards/mean_reward', np.mean(episode_rewards), global_step=current_step)
 
-            self.writer.iteration += 1
 
         self.save_model()
         self.writer.close()

@@ -173,6 +173,7 @@ class Inky(Ghost):
         path = None
         direction = -1
         take_blinky_into_account = False
+        target_position = None
 
         # Find the closest Pacman on the map
         closest_pacman, closest_distance = self.find_pacman_target(pacmans, navigation_algo)
@@ -204,7 +205,8 @@ class Inky(Ghost):
                 target_position = closest_pacman.position
 
         # Move towards target
-        direction, path = self.get_action_path(target_position, navigation_algo)
+        if target_position is not None:
+            direction, path = self.get_action_path(target_position, navigation_algo)
 
         if direction == -1 :
             direction = random.randint(0, 3)

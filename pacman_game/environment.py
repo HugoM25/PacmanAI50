@@ -37,6 +37,8 @@ class PacmanEnv(gym.Env):
         self.freq_change_level = freq_change_level
         self.ep_before_change_level = freq_change_level
 
+        self.max_steps = MAX_STEPS
+
     def load_level(self, level_csv_path:str):
         # Load the map
         self.current_level_name = level_csv_path
@@ -151,7 +153,7 @@ class PacmanEnv(gym.Env):
                 # Pick it up
                 self.map.type_map[candidate_position[0], candidate_position[1]] = EMPTY
                 # Reward the agent
-                rewards[agent_index] += REWARDS["RW_GUM"]
+                rewards[agent_index] += REWARDS["RW_FRUIT"]
                 agent.score += 100
 
             elif candidate_cell_type == KEY:
@@ -163,6 +165,28 @@ class PacmanEnv(gym.Env):
 
             elif candidate_cell_type == EMPTY:
                 rewards[agent_index] += REWARDS["RW_EMPTY"]
+
+            # Check for collision with other pacman (here pacman collides with pacman and cannot pass through)
+            no_obstacles = True
+            if self.nb_agents > 1:
+                for index, other_agent in enumerate(self.agents):
+                    if index != agent_index and other_agent.alive and np.all(other_agent.position == candidate_position):
+                        # Don't move
+                        no_obstacles = False
+                        rewards[agent_index] += REWARDS["RW_NO_MOVE"] 
+
+            # Move the agent
+            if no_obstacles:
+                agent.position = candidate_position
+
+                # Update the exploration map of the agent (- reward for exploring already explored area)
+                if agent.exploration_map[candidate_position[0], candidate_position[1]] == 0:
+                    rewards[agent_index] += REWARDS["EXPLORE_REWARD"]
+                else:
+                    rewards[agent_index] += REWARDS["ALREADY_EXPLORED"] * agent.exploration_map[candidate_position[0], candidate_position[1]]
+                
+                agent.exploration_map[candidate_position[0], candidate_position[1]] += 1
+            
 
             # Check for pacman collision with the ghosts (here pacman collides with ghost)
             for ghost in self.ghosts:
@@ -182,18 +206,6 @@ class PacmanEnv(gym.Env):
                         self.alive_agents -= 1
                         # Reward the agent
                         rewards[agent_index] += REWARDS["RW_DYING_TO_GHOST"]
-
-            # Check for collision with other pacman (here pacman collides with pacman and cannot pass through)
-            no_obstacles = True
-            if self.nb_agents > 1:
-                for index, other_agent in enumerate(self.agents):
-                    if index != agent_index and other_agent.alive and np.all(other_agent.position == candidate_position):
-                        # Don't move
-                        no_obstacles = False
-                        rewards[agent_index] += REWARDS["RW_NO_MOVE"]
-            # Move the agent
-            if no_obstacles:
-                agent.position = candidate_position
 
 
         for ghost in self.ghosts:
@@ -333,7 +345,6 @@ class PacmanEnv(gym.Env):
         info = {}
 
         self.current_step = 0
-        self.max_steps = MAX_STEPS
 
         # If the level folder path is a list then choose a random level
         if len(self.levels_paths) > 1 and self.ep_before_change_level <= 0:
