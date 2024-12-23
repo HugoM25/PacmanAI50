@@ -19,17 +19,46 @@ OPPOSITE_ACTION = {
     RIGHT: LEFT
 }
 
+# REWARDS = {
+#     "RW_GUM": 200,
+#     "RW_SUPER_GUM": 100,
+#     "RW_EMPTY": -50,
+#     "RW_NO_MOVE": -110,
+#     "RW_DYING_TO_GHOST": -10110,
+#     "RW_EATING_GHOST": 500,
+#     "RW_WINNING": 10000,
+#     "RW_TURNING_BACK": -100,
+#     "RW_KEY": 120,
+#     "RW_LIVING": -5
+# }
+
+# REWARDS = {
+#     "RW_GUM": 154,
+#     "RW_SUPER_GUM": 200,
+#     "RW_EMPTY": -7,
+#     "RW_NO_MOVE": -110,
+#     "RW_DYING_TO_GHOST": -10110,
+#     "RW_EATING_GHOST": 500,
+#     "RW_WINNING": 10000,
+#     "RW_TURNING_BACK": -100,
+#     "RW_KEY": 120,
+#     "RW_LIVING": -5
+# }
+
 REWARDS = {
-    "RW_GUM": 10,
-    "RW_SUPER_GUM": 10,
-    "RW_EMPTY": -0.0,
-    "RW_NO_MOVE": -10,
-    "RW_DYING_TO_GHOST": -10,
-    "RW_EATING_GHOST": 10,
-    "RW_WINNING": 10000,
-    "RW_TURNING_BACK": -0.6,
-    "RW_KEY": 7,
-    "RW_LIVING": -0.5
+    "RW_GUM": 20,  # Increase reward for eating gum
+    "RW_SUPER_GUM": 50,  # Increase reward for eating super gum
+    "RW_EMPTY": 0,  # Small penalty for empty moves
+    "RW_NO_MOVE": -10,  # Penalty for no move
+    "RW_DYING_TO_GHOST": -1000,  # Penalty for dying to ghost
+    "RW_EATING_GHOST": 200,  # Reward for eating ghost
+    "RW_WINNING": 1000,  # Reward for winning
+    "RW_TURNING_BACK": -5,  # Small penalty for turning back
+    "RW_KEY": 20,  # Reward for picking up key
+    "RW_LIVING": -0.1,  # Small penalty for each step to encourage faster completion
+    "RW_FRUIT": 45, # Reward for eating fruit
+    "EXPLORE_REWARD": 10,  # Reward for exploring new area
+    "ALREADY_EXPLORED": -0.5  # Penalty for already explored area
 }
 
 MAX_STEPS = 1500

@@ -1,3 +1,5 @@
+import numpy as np
+
 class Pacman() :
     def __init__(self, position: tuple[int, int]):
         super().__init__()
@@ -26,6 +28,8 @@ class Pacman() :
 
         self.has_key = False
 
+        self.exploration_map = np.zeros((31, 28))
+
     def reset(self) :
         self.position = self.start_pos
         self.score = 0
@@ -35,6 +39,8 @@ class Pacman() :
         self.superpower_step_left = 0
         self.last_action = -1
         self.has_key = False
+
+        self.exploration_map = np.zeros((31, 28))
 
 
 
