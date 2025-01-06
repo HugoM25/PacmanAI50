@@ -203,19 +203,10 @@ class Map :
             # Add the pacman to the image
             map_img[x*self.tile_size:(x+1)*self.tile_size, y*self.tile_size:(y+1)*self.tile_size] = pacman_tile_rotated
 
-            # # Write its x,y position on top of pacman
-            # cv2.putText(map_img, f"({x},{y})", (y*self.tile_size + 5, x*self.tile_size + 15), font, 0.3, (255, 255, 255), 1, cv2.LINE_AA)
-
-        # ADD on every 5 tile of the map the position (x,y) of the tile
-        # for i in range(self.type_map.shape[0]):
-        #     for j in range(self.type_map.shape[1]):
-        #         if i % 5 == 0 and j % 5 == 0:
-        #             cv2.putText(map_img, f"({i},{j})", (j*self.tile_size + 5, i*self.tile_size + 15), font, 0.3, (255, 255, 255), 1, cv2.LINE_AA)
-
         if infos is not None :
             # Show the path planned by the ghosts
             if 'ghosts_paths' in infos:
-                        colors_paths = [(0, 0, 255), (0, 255, 0), (255, 0, 0), (255, 255, 0)]
+                        colors_paths = [(0, 0, 255), (255, 204, 0), (255, 102, 204), (0, 204, 255)]
                         for color_index, ghost_type in enumerate([GHOST_BLINKY, GHOST_INKY, GHOST_PINKY, GHOST_CLYDE]):
                             if ghost_type in infos['ghosts_paths'] and infos['ghosts_paths'][ghost_type] is not None:
                                 path = infos['ghosts_paths'][ghost_type]

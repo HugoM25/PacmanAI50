@@ -12,6 +12,9 @@ from trainers.trainer import Trainer
 from torch.utils.tensorboard import SummaryWriter
 
 class PPOTrainer(Trainer):
+    '''
+    PPO Trainer class that can be used to train a PPO based model
+    '''
     def __init__(self,
                  env,
                  model,
@@ -31,10 +34,11 @@ class PPOTrainer(Trainer):
                  show_gameplay_freq=-1,
                  save_model_freq=10_000,
                  max_grad_norm=0.1,
-                 max_steps_env=1500
+                 max_steps_env=1500,
                  ):
 
         self.env = env
+
         self.model = model.to(device)
         self.device = device
         self.optimizer = optimizer
@@ -65,6 +69,13 @@ class PPOTrainer(Trainer):
         self.save_model_freq = save_model_freq
 
     def compute_advantages(self, rewards, dones, values, next_value):
+        '''
+        Compute the advantages
+        @param rewards: list of rewards
+        @param dones: list of dones
+        @param values: list of values
+        @param next_value: value of the next state
+        '''
         advantages = []
         gae = 0
         next_value = next_value
@@ -75,7 +86,11 @@ class PPOTrainer(Trainer):
             advantages.insert(0, gae)
         return advantages
 
-    def update_model(self, trajectory):
+    def update_model(self, trajectory) -> None:
+        '''
+        Update the model with the collected trajectory
+        @param trajectory: list of tuples (state, action, reward, done, log_prob, value)
+        '''
         states, actions, rewards, dones, log_probs, values = zip(*trajectory)
 
         # States is composed of a map of the environment and additional informations in a list like [[map, info], [map2, info2], ...]
@@ -172,8 +187,8 @@ class PPOTrainer(Trainer):
     def get_action_mask(self, map_state, info_state):
         '''
         Returns a mask for valid actions (True) and invalid actions (False)
-        map_state: [batch_size, height, width] tensor containing the map
-        info_state: [batch_size, ...] tensor containing agent info including position
+        @param map_state: [batch_size, height, width] tensor containing the map
+        @param info_state: [batch_size, ...] tensor containing agent info including position
         '''
         batch_size = map_state.shape[0]
         height, width = map_state.shape[1:3]
@@ -216,6 +231,8 @@ class PPOTrainer(Trainer):
     def compute_masked_loss(self, action_masks, actions):
         '''
         Add penalty for selecting invalid actions
+        @param action_masks: [batch_size, num_actions] tensor containing action masks
+        @param actions: [batch_size] tensor containing selected actions
         '''
         invalid_actions = ~action_masks[torch.arange(len(actions)), actions]
         mask_loss = invalid_actions.float().mean() * self.mask_penalty
@@ -223,11 +240,19 @@ class PPOTrainer(Trainer):
 
 
     def show_gameplay(self, img):
+        """
+        Show the gameplay
+        @param img: image to display
+        """
         cv2.imshow('Pacman', img)
         # Simplified key check
         return cv2.waitKey(1) != ord('q')
 
     def render_video(self, name="episode"):
+        """
+        Render a video of the episode
+        @param name: name of the video
+        """
 
         if not self.video_frames:
             return
@@ -249,6 +274,7 @@ class PPOTrainer(Trainer):
         current_step = 0
         episode_count = 0
         self.writer.iteration = 0
+        best_ep_reward = -np.inf
 
         self.save_model_countdown = self.save_model_freq
 
@@ -263,6 +289,7 @@ class PPOTrainer(Trainer):
             values = [ [] for _ in range(self.env.nb_agents)]
 
             done = False
+            infos = {}
             episode_rewards = [0 for _ in range(self.env.nb_agents)]
             observations, _ = self.env.reset()
 
@@ -270,27 +297,32 @@ class PPOTrainer(Trainer):
             self.video_frames = []
 
             rewards_earned = []
+            episode_step = 0
+
 
             # Collect trajectories by playing the game
             while len(rewards[0]) < self.n_steps or not done:
-
                 show_episode_gameplay = self.show_gameplay_freq >= 0 and episode_count % self.show_gameplay_freq == 0
                 save_episode_video = self.save_video_freq != -1 and episode_count % self.save_video_freq == 0
 
                 current_step += 1
                 self.save_model_countdown -= 1
+                episode_step += 1
 
                 # Render the environment every X episodes
                 if show_episode_gameplay or save_episode_video:
 
                     disp_infos = {'episode': episode_count,
-                                  'step': len(rewards[0]),
+                                  'step': episode_step,
                                   'rewards': episode_rewards[0],
                                   'probabilities_moves': last_proba_actions,
                                   'rewards_earned': rewards_earned,
-                                  'total_steps': current_step
+                                  'total_steps': current_step,
                                   }
-
+                    
+                    if 'ghosts_paths' in infos and infos['ghosts_paths'] :
+                        disp_infos['ghosts_paths']= infos['ghosts_paths']
+                    
                     img = self.env.render(mode='rgb_array', infos=disp_infos)
 
                     if show_episode_gameplay :
@@ -298,6 +330,7 @@ class PPOTrainer(Trainer):
 
                     if save_episode_video :
                         self.video_frames.append(img)
+                    
 
                 actions_to_play = []
 
@@ -343,6 +376,7 @@ class PPOTrainer(Trainer):
                     mean_rewards_buffer.append(np.mean(episode_rewards))
                     self.writer.add_scalar('Rewards/episode_reward', episode_rewards[0], global_step=current_step)
                     self.writer.add_scalar('Rewards/mean_reward', np.mean(episode_rewards), global_step=current_step)
+                    episode_step = 0
 
                     self.writer.iteration += 1
                     if episode_count % 1 == 0:
@@ -350,6 +384,11 @@ class PPOTrainer(Trainer):
                     
                     if save_episode_video:
                         self.render_video(name=f"episode_{episode_count}")
+
+                    if episode_rewards[0] > best_ep_reward:
+                        print(f"New best reward: {episode_rewards[0]}")
+                        best_ep_reward = episode_rewards[0]
+                        self.save_model("_best")
 
                     observations, _ = self.env.reset()
                     episode_count += 1
@@ -377,7 +416,15 @@ class PPOTrainer(Trainer):
         self.writer.close()
 
     def save_model(self, steps=0):
+        '''
+        Save the model, using the number of steps in the filename
+        @param steps: number of steps
+        '''
         torch.save(self.model.state_dict(), f"models/model{steps}.pth")
 
     def load_model(self, path):
+        '''
+        Load the model from a file
+        @param path: path to the model file
+        '''
         self.model.load_state_dict(torch.load(path))
