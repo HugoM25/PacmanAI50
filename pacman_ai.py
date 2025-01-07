@@ -2,7 +2,7 @@ import pygame
 import tkinter as tk
 from tkinter import filedialog
 
-import torch 
+import torch
 from pacman_game import PacmanEnv
 from models import *
 import cv2
@@ -17,7 +17,7 @@ BG_DROPDOWN_HOVER = (180, 184, 171)
 BG_BUTTON_STOP = (21, 50, 67)
 TEXT_COLOR = (244, 249, 233)
 
-def main(args) : 
+def main(args) :
     pass
 
 class Button(pygame.sprite.Sprite):
@@ -32,11 +32,11 @@ class Button(pygame.sprite.Sprite):
         self.icon = pygame.image.load(icon_path) if icon_path else None
         if self.icon:
             self.icon = pygame.transform.scale(self.icon, (self.size[1] - 20, self.size[1] - 20))  # Scale icon to fit within the button height
-    
+
     def draw(self, win) :
         font = pygame.font.Font(None, 36)
         text = font.render(self.text, True, self.text_color)
-        
+
         # Calculate the position for the text and icon
         if self.icon:
             icon_rect = self.icon.get_rect()
@@ -47,15 +47,15 @@ class Button(pygame.sprite.Sprite):
             text_rect.topleft = (icon_rect.right + 10, self.pos[1] + (self.size[1] - text_rect.height) // 2)
         else:
             text_rect = text.get_rect(center=(self.pos[0] + self.size[0] // 2, self.pos[1] + self.size[1] // 2))
-        
+
         pygame.draw.rect(win, self.background_color, (self.pos[0], self.pos[1], self.size[0], self.size[1]))
-        
+
         if self.icon:
             win.blit(self.icon, icon_rect)
-        
+
         win.blit(text, text_rect)
 
-    def is_clicked(self, event): 
+    def is_clicked(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
             x, y = event.pos
             if x > self.pos[0] and x < self.pos[0] + self.size[0] and y > self.pos[1] and y < self.pos[1] + self.size[1]:
@@ -103,7 +103,7 @@ class Dropdown:
             if self.pos[0] <= x <= self.pos[0] + self.size[0] and self.pos[1] <= y <= self.pos[1] + self.size[1] * (len(self.options) if self.expanded else 1):
                 return True
         return False
-    
+
     def handle_event(self, event):
         if self.is_clicked(event):
             if self.expanded:
@@ -177,7 +177,7 @@ class TextField:
         win.blit(txt_surface, (self.rect.x+5, self.rect.y+5))
         pygame.draw.rect(win, self.color, self.rect, 2)
 
-class PacmanAI: 
+class PacmanAI:
     def __init__(self):
         self.is_game_running = False
         self.model_type = "PPO"
@@ -191,9 +191,9 @@ class PacmanAI:
                                   "Level 4": ["pacman_game/res/levels/level4_0.csv"],
                                   "Level Final": ["pacman_game/res/levels/final_level.csv"]
                                 }
-        
+
         self.model_types = ["PPO", "DQN"]
-        
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = PacmanEnv(levels_paths=self.levels_available[self.selected_level], freq_change_level=1)
         self.env.max_steps = 2000
@@ -204,7 +204,7 @@ class PacmanAI:
             self.model = PacmanModelDQN(self.env, 4).to(self.device)
 
         self.run_pygame_GUI()
-        
+
     def run_pygame_GUI(self):
         # Initialize the window
         pygame.init()
@@ -212,9 +212,9 @@ class PacmanAI:
         pygame.display.set_caption("Pacman AI")
         running = True
 
-        # Define the buttons  
+        # Define the buttons
         button_load = Button("Load a Model", pos=(0, 170), size=(WINDOW_W, 50), background_color=BG_BUTTON_LOAD)
-        dropdown_level = Dropdown([level_name for level_name in self.levels_available], pos=(0, 110), size=(WINDOW_W//2-5, 50))       
+        dropdown_level = Dropdown([level_name for level_name in self.levels_available], pos=(0, 110), size=(WINDOW_W//2-5, 50))
         dropdown_model_type = Dropdown(["PPO", "DQN"], pos=(WINDOW_W//2+5, 110), size=(WINDOW_W//2-5, 50))
         button_stop = Button("STOP", pos=(0, 230), size=(WINDOW_W//2-5, 50))
         button_pause = Button("PAUSE", pos=(WINDOW_W//2+5, 230), size=(WINDOW_W//2-5, 50))
@@ -258,10 +258,10 @@ class PacmanAI:
                     self.is_game_running = False
                 elif button_start.is_clicked(event):
                     observations, _ = self.start_game()
-                
+
             # Fill the screen with a color
             screen.fill(BG_WINDOWS)
-            
+
             # Draw the buttons and dropdown
             button_load.draw(screen)
 
@@ -284,20 +284,20 @@ class PacmanAI:
                     disp_infos = {'step': episode_steps,
                                     'probabilities_moves': self.last_proba_actions,
                                     }
-                    
+
                     if 'ghosts_paths' in infos and infos['ghosts_paths'] :
                         disp_infos['ghosts_paths']= infos['ghosts_paths']
-                    
+
 
                     img = self.env.render(mode='rgb_array', infos=disp_infos)
                     self.show_gameplay(img)
-        
+
                     actions_to_play = []
 
                     # For each agent, get the action to play
                     for agent_index, observation in enumerate(observations):
                             map_obs, info_obs = observation
-                            
+
                             map_state_tensor = torch.tensor(map_obs, dtype=torch.float32).unsqueeze(0).to(self.device)
                             info_state_tensor = torch.tensor(info_obs, dtype=torch.float32).unsqueeze(0).to(self.device)
 
@@ -344,21 +344,21 @@ class PacmanAI:
         cv2.imshow('Pacman', img)
         # Simplified key check
         return cv2.waitKey(1) != ord('q')
-    
+
     def start_game(self):
 
         if self.model_path is None :
             print("No model was loaded. Defaulting to random initiated model. Please load a model if you want to test one.")
-        
+
         self.env = PacmanEnv(levels_paths=self.levels_available[self.selected_level], freq_change_level=1)
         self.last_proba_actions = [[] for _ in range(self.env.nb_agents)]
         self.env.max_steps = 2000
         self.is_game_running = True
-        
+
 
         return self.env.reset()
 
-    
+
     def load_file(self):
         root = tk.Tk()
         root.withdraw()  # Hide the root window
@@ -366,17 +366,21 @@ class PacmanAI:
         if file_path:
             return file_path
         return None
-    
-    def load_model(self, model_path):
-        if model_path is not None:
-            self.model_path = model_path
-            pretrained_dict = torch.load(model_path)
-            self.model.load_state_dict(pretrained_dict)
-            print(f"Model loaded: {model_path}")
-        else:
-            print("No model path provided. Please provide a model path to load a model.")
 
-    
+    def load_model(self, model_path):
+            if model_path is not None:
+                self.model_path = model_path
+                try:
+                    # Load the model onto the CPU regardless of its original device
+                    pretrained_dict = torch.load(model_path, map_location=torch.device('cpu'))
+                    self.model.load_state_dict(pretrained_dict)
+                    self.model.to(self.device)  # Ensure the model is on the correct device
+                    print(f"Model loaded: {model_path}")
+                except Exception as e:
+                    print(f"Error loading model: {e}")
+            else:
+                print("No model path provided. Please provide a model path to load a model.")
+
     def get_action_mask(self, map_state, info_state):
         '''
         Returns a mask for valid actions (True) and invalid actions (False)
